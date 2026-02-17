@@ -1,22 +1,25 @@
 ---
 title: Data Model Specifications
-version: 1.4
+version: 1.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [data-model, database, firestore, mongodb]
+tags: [data-model, database, firestore, mongodb, vector-search]
 ---
 
 ## Data Model Specifications
 
 ### Database
 
-- **Technology**: Firestore Enterprise in MongoDB compatibility mode
+- **Primary Database**: Firestore Enterprise in MongoDB compatibility mode
+- **Vector Database**: Firestore Native Mode (for semantic search vector storage)
 - **Region**: `asia-southeast1`
-- **Driver**: MongoDB Go driver (standard MongoDB wire protocol)
-- **Reference**: https://firebase.google.com/docs/firestore/enterprise/mongodb-compatibility-overview
+- **Primary Driver**: MongoDB Go driver (standard MongoDB wire protocol)
+- **Vector Driver**: Firestore Go SDK (`cloud.google.com/go/firestore`)
+- **Reference (Enterprise)**: https://firebase.google.com/docs/firestore/enterprise/mongodb-compatibility-overview
+- **Reference (Native Vector Search)**: https://firebase.google.com/docs/firestore/vector-search
 
-Data models below use MongoDB-style field definitions, compatible with the MongoDB wire protocol exposed by Firestore Enterprise.
+Data models below use MongoDB-style field definitions for Firestore Enterprise collections. Firestore Native collections are documented separately (see DM-012).
 
 ---
 
@@ -65,7 +68,8 @@ Data models below use MongoDB-style field definitions, compatible with the Mongo
 | `idx_tags`              | `tags`                          | Multikey | Tag filtering                |
 | `idx_date_updated`      | `date_updated`                  | Standard | Date range queries, sorting  |
 | `idx_date_created`      | `date_created`                  | Standard | Internal use / content management queries |
-| `idx_text_search`       | `title`, `abstract`, `content`  | Text     | Full-text search             |
+
+> **Note**: Full-text search is handled by vector similarity search via Firestore Native (see DM-012), not by MongoDB text indexes.
 
 **Constraints**:
 - `slug` must be unique.
@@ -148,7 +152,8 @@ Data models below use MongoDB-style field definitions, compatible with the Mongo
 | `idx_tags`              | `tags`                          | Multikey | Tag filtering                |
 | `idx_date_created`      | `date_created`                  | Standard | Date range queries           |
 | `idx_date_updated`      | `date_updated`                  | Standard | Date range queries           |
-| `idx_text_search`       | `title`, `abstract`             | Text     | Full-text search             |
+
+> **Note**: Full-text search for `others` is handled by vector similarity search via Firestore Native (see DM-012), not by MongoDB text indexes.
 
 ---
 
@@ -270,19 +275,95 @@ Data models below use MongoDB-style field definitions, compatible with the Mongo
 
 ---
 
+#### DM-011: `embedding_cache` (Firestore Enterprise)
+
+**Description**: Caches search query embedding vectors to avoid redundant calls to the Gemini embedding API. Document IDs are deterministic UUID v5 values derived from lowercased search text. **No search strings are stored** — only the UUID and the corresponding vector.
+
+| Field          | Type       | Required | Description                                    |
+| -------------- | ---------- | -------- | ---------------------------------------------- |
+| `_id`          | string     | Yes      | UUID v5 of the lowercased search text (namespace: `6ba7b811-9dad-11d1-80b4-00c04fd430c8`, name: lowercased query string) |
+| `vector`       | double[]   | Yes      | 768-dimensional embedding vector from Gemini `text-embedding-004` |
+| `created_at`   | datetime   | Yes      | When the embedding was first cached (UTC)      |
+
+**Indexes**:
+
+| Index Name         | Fields   | Type   | Purpose                    |
+| ------------------ | -------- | ------ | -------------------------- |
+| (none)             | `_id`    | Primary | Cache lookup by UUID v5    |
+
+**Constraints**:
+- Document ID (`_id`) is the UUID v5 of the lowercased search string. The same query always produces the same UUID.
+- No search strings or query text is stored anywhere in this collection.
+- No TTL / no cache expiration. Cached embeddings persist indefinitely.
+- The embedding model version (`text-embedding-004`) is implicit. If the model is upgraded, the cache must be invalidated (cleared) to regenerate embeddings with the new model.
+
+**UUID v5 Generation**:
+```
+namespace = "6ba7b811-9dad-11d1-80b4-00c04fd430c8" (standard URL namespace)
+name      = lowercase(search_query)
+doc_id    = UUID_v5(namespace, name)
+```
+
+---
+
+#### DM-012: Vector Collections (Firestore Native Mode)
+
+**Description**: Three collections in Firestore Native Mode store article embedding vectors for semantic similarity search. Each collection mirrors a content collection in Firestore Enterprise.
+
+> **Important**: These collections are in **Firestore Native Mode**, NOT Firestore Enterprise (MongoDB compat). They are accessed via the Firestore Go SDK, not the MongoDB driver.
+
+##### DM-012a: `technical_article_vectors`
+
+| Field                | Type       | Required | Description                                    |
+| -------------------- | ---------- | -------- | ---------------------------------------------- |
+| Document ID          | string     | Yes      | Same `_id` as the corresponding `technical_articles` document in Firestore Enterprise |
+| `embedding`          | vector(768)| Yes      | 768-dimensional embedding vector (Gemini `text-embedding-004`, task type: `RETRIEVAL_DOCUMENT`) |
+| `embedding_text_hash`| string     | Yes      | SHA-256 hash of the source text used for embedding (for change detection during sync) |
+| `updated_at`         | datetime   | Yes      | When the embedding was last generated (UTC)    |
+
+**Embedding Source Text**: `title + "\n" + abstract + "\n" + category + "\n" + tags (comma-separated)`
+
+**Vector Index**:
+
+| Index Field  | Dimension | Distance Measure | Purpose                      |
+| ------------ | --------- | ---------------- | ---------------------------- |
+| `embedding`  | 768       | COSINE           | Semantic similarity search   |
+
+##### DM-012b: `blog_article_vectors`
+
+Identical schema and vector index to DM-012a, but mirrors `blog_articles` in Firestore Enterprise.
+
+##### DM-012c: `others_vectors`
+
+Identical schema and vector index to DM-012a, but mirrors `others` in Firestore Enterprise.
+
+**Embedding Source Text for `others`**: `title + "\n" + abstract + "\n" + category + "\n" + tags (comma-separated)`
+
+**Constraints (all DM-012 collections)**:
+- Document IDs MUST match the corresponding `_id` in Firestore Enterprise for 1:1 mapping.
+- The `embedding_text_hash` field enables incremental sync — only re-embed articles whose source text has changed.
+- Vector embeddings are generated by the `sync-article-embeddings` Cloud Function (INFRA-014) using Gemini `text-embedding-004` with `task_type=RETRIEVAL_DOCUMENT`.
+- When an article is deleted from Firestore Enterprise, the corresponding vector document SHOULD be deleted from Firestore Native during the next sync.
+
+---
+
+---
+
 ### Data Relationships
 
 ```
 frontpage (1 document)
     └── standalone
 
-technical_articles (many documents)
+technical_articles (many documents) [Firestore Enterprise]
     └── standalone, queried by slug/category/tags/date_updated
     └── category field → referenced in categories collection
+    └── vector search via technical_article_vectors [Firestore Native]
 
-blog_articles (many documents)
+blog_articles (many documents) [Firestore Enterprise]
     └── standalone, identical structure to technical_articles
     └── category field → referenced in categories collection
+    └── vector search via blog_article_vectors [Firestore Native]
 
 categories (many documents)
     └── derived from article categories across all article types
@@ -291,9 +372,10 @@ categories (many documents)
 socials (few documents)
     └── standalone, ordered by sort_order, filtered by is_active
 
-others (many documents)
+others (many documents) [Firestore Enterprise]
     └── standalone, links to external URLs
     └── category field → referenced in categories collection
+    └── vector search via others_vectors [Firestore Native]
 
 tracking (many documents, append-only)
     └── standalone, TTL auto-expiry (90 days)
@@ -309,4 +391,24 @@ rate_limit_offenders (many documents)
 sitemap (single document)
     └── standalone, generated by Cloud Scheduler job
     └── served via GET /sitemap.xml endpoint
+
+embedding_cache (many documents) [Firestore Enterprise]
+    └── keyed by UUID v5 of lowercased search text
+    └── caches Gemini embedding vectors for search queries
+    └── no expiration
+
+technical_article_vectors (many documents) [Firestore Native]
+    └── 1:1 mapping to technical_articles by document ID
+    └── vector indexed for cosine similarity search
+    └── synced by sync-article-embeddings Cloud Function (INFRA-014)
+
+blog_article_vectors (many documents) [Firestore Native]
+    └── 1:1 mapping to blog_articles by document ID
+    └── vector indexed for cosine similarity search
+    └── synced by sync-article-embeddings Cloud Function (INFRA-014)
+
+others_vectors (many documents) [Firestore Native]
+    └── 1:1 mapping to others by document ID
+    └── vector indexed for cosine similarity search
+    └── synced by sync-article-embeddings Cloud Function (INFRA-014)
 ```

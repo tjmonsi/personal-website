@@ -1,10 +1,10 @@
 ---
 title: Observability Specifications
-version: 1.6
+version: 1.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [observability, logging, monitoring, tracking]
+tags: [observability, logging, monitoring, tracking, vector-search]
 ---
 
 ## Observability Specifications
@@ -75,12 +75,17 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 - Internal error masked as 404 (ERROR): full error details
 - Database query errors (ERROR): query details (sanitized), error message
 - Slow queries > 1 second (WARNING): query details, duration
+- Embedding cache hit (INFO): UUID v5 document ID, collection searched
+- Embedding cache miss (INFO): UUID v5 document ID, Gemini API call duration in ms
+- Gemini embedding API error (ERROR): error type, message, UUID v5 document ID
+- Vector search executed (INFO): collection, number of candidates returned, distance range, latency in ms
+- Vector search no results within threshold (INFO): collection, threshold used
 
 ---
 
 ### OBS-001a: Structured Logging (Cloud Functions)
 
-**Purpose**: Ensure Cloud Functions (sitemap generation and rate-limit log processing) produce structured, queryable logs consistent with the backend logging approach.
+**Purpose**: Ensure Cloud Functions (sitemap generation, rate-limit log processing, and article embedding sync) produce structured, queryable logs consistent with the backend logging approach.
 
 **Format**: JSON structured logs to stdout (Cloud Functions automatically ingests into Cloud Logging).
 
@@ -102,6 +107,19 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 | Offense recorded               | WARNING | Client IP, offense count, endpoint         |
 | Ban applied                    | WARNING | Client IP, ban tier, expiry                |
 | Processing error               | ERROR   | Error type, message, stack trace           |
+
+**Logging Requirements for `sync-article-embeddings` (INFRA-014)**:
+
+| Event                          | Level   | Details                                    |
+| ------------------------------ | ------- | ------------------------------------------ |
+| Sync started                   | INFO    | Trigger source, timestamp                  |
+| Articles scanned               | INFO    | Count per collection (technical, blog, others) |
+| Embeddings generated           | INFO    | Count of new/updated embeddings, Gemini API calls made |
+| Embeddings skipped (unchanged) | INFO    | Count of articles with unchanged hash      |
+| Orphans deleted                | INFO    | Count of vector documents removed          |
+| Sync duration                  | INFO    | Total processing time in ms                |
+| Gemini API error               | ERROR   | Error type, message, article ID            |
+| Sync error                     | ERROR   | Error type, message, stack trace           |
 
 ---
 
@@ -187,6 +205,11 @@ const speedInfo = connection ? {
 | `api_bans_active`              | Gauge     | ban_tier                  | Currently active bans          |
 | `db_query_duration_ms`         | Histogram | collection, operation     | Database query latency         |
 | `db_connection_pool_active`    | Gauge     | —                         | Active DB connections          |
+| `embedding_cache_hits_total`   | Counter   | collection                | Embedding cache hits           |
+| `embedding_cache_misses_total` | Counter   | collection                | Embedding cache misses (Gemini API called) |
+| `embedding_api_duration_ms`    | Histogram | —                         | Gemini embedding API call latency |
+| `vector_search_duration_ms`    | Histogram | collection                | Firestore Native vector search latency |
+| `vector_search_candidates`     | Histogram | collection                | Number of candidates returned per vector search |
 
 **Cloud Armor Metrics** (sourced from Cloud Monitoring, not application-level):
 
@@ -222,6 +245,9 @@ const speedInfo = connection ? {
 | High rate limit triggers        | Cloud Armor `blocked_by_policy` count > 100 in 5 min (via Cloud Monitoring) | Email / Slack | Warning |
 | Indefinite ban applied          | Log entry for indefinite ban                 | Email               | Info     |
 | Sitemap generation failure      | ERROR log from `generate-sitemap` Cloud Function | Email / Slack    | Warning  |
+| Gemini embedding API failure    | ERROR log from embedding API call (Cloud Run or Cloud Function) | Email / Slack | Warning |
+| Embedding sync failure          | ERROR log from `sync-article-embeddings` Cloud Function | Email / Slack | Warning |
+| High embedding cache miss rate  | `embedding_cache_misses_total` > 50 in 5 min | Email               | Info     |
 
 ---
 
@@ -235,6 +261,10 @@ const speedInfo = connection ? {
 - Cloud Run instance count over time
 - Database query latency by collection
 - Active rate limit bans
+- Embedding cache hit/miss ratio
+- Gemini embedding API latency (P50, P95)
+- Vector search latency by collection
+- Vector search candidate count distribution
 
 **Analytics Dashboard** (Looker Studio via BigQuery — see INFRA-010, INFRA-011):
 

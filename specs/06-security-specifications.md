@@ -1,10 +1,10 @@
 ---
 title: Security Specifications
-version: 1.7
+version: 1.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [security, rate-limiting, cors, authentication]
+tags: [security, rate-limiting, cors, authentication, vector-search]
 ---
 
 ## Security Specifications
@@ -22,6 +22,8 @@ tags: [security, rate-limiting, cors, authentication]
 | Bot abuse                     | robots.txt, rate limiting, Cloud Armor bot management | Both           |
 | Unauthorized tracking abuse   | JWT bearer token authentication on POST /t            | Application    |
 | Analytics data exposure       | Least-privilege service account with read-only BigQuery access | Infrastructure |
+| Embedding API abuse           | Embedding cache prevents redundant Gemini API calls; rate limiting on search endpoints | Application + Infrastructure |
+| Vector data exfiltration       | Firestore Native IAM; vectors contain no readable text         | Infrastructure |
 
 ---
 
@@ -358,3 +360,38 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - The service account key (JSON) SHALL be stored securely by the website owner and NOT committed to any repository.
 - The service account key SHALL be rotated periodically (recommended: every 90 days).
 - IF the service account key is compromised, THE SYSTEM SHALL revoke the key immediately and generate a new one.
+
+---
+
+### SEC-010: Vector Search & Vertex AI Security
+
+**Purpose**: Secure the vector search infrastructure, including Firestore Native Mode access, Vertex AI embedding API, and the embedding cache.
+
+#### Firestore Native Mode Access Control
+
+| Principal                              | Role                                   | Scope                          | Purpose                                    |
+| -------------------------------------- | -------------------------------------- | ------------------------------ | ------------------------------------------ |
+| Cloud Run service account              | `roles/datastore.viewer`               | `vector-search` database       | Read vector documents for search queries   |
+| `sync-article-embeddings` Cloud Function SA | `roles/datastore.user`            | `vector-search` database       | Read/write vector documents during sync    |
+
+**Constraints**:
+- THE SYSTEM SHALL NOT grant Cloud Run write access to the Firestore Native database. Cloud Run only reads vectors for search.
+- Only the `sync-article-embeddings` Cloud Function SHALL have write access to Firestore Native.
+
+#### Vertex AI Embedding API Access Control
+
+| Principal                              | Role                                   | Scope   | Purpose                                    |
+| -------------------------------------- | -------------------------------------- | ------- | ------------------------------------------ |
+| Cloud Run service account              | `roles/aiplatform.user`               | Project | Call Gemini embedding API for query vectors |
+| `sync-article-embeddings` Cloud Function SA | `roles/aiplatform.user`           | Project | Call Gemini embedding API for article vectors |
+
+**Constraints**:
+- No other service account SHALL have access to the Vertex AI API.
+- The embedding API is called within Google Cloud infrastructure (no external API keys exposed).
+
+#### Embedding Cache Security
+
+- The `embedding_cache` collection (DM-011) in Firestore Enterprise does NOT store search strings — only UUID v5 identifiers and embedding vectors.
+- Embedding vectors are numerical representations and cannot be reverse-engineered to recover the original text.
+- The UUID v5 document IDs are cryptographic hashes (SHA-1 based) and cannot be reversed to the original query text.
+- No additional access controls beyond the existing Cloud Run Firestore Enterprise service account are required for the cache.

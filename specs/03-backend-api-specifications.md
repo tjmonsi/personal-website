@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 1.4
+version: 1.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -15,6 +15,8 @@ tags: [backend, api, go, cloud-run]
 - **Runtime**: Google Cloud Run (asia-southeast1)
 - **Network**: Behind Google Cloud Load Balancer + Cloud Armor
 - **Database**: Firestore Enterprise (MongoDB compatibility mode) via MongoDB Go driver
+- **Vector Database**: Firestore Native Mode via Firestore Go SDK (for semantic search)
+- **Embedding**: Vertex AI Gemini `text-embedding-004` (for search query embedding)
 - **Domain**: `api.tjmonsi.com`
 
 ### Global API Rules
@@ -147,7 +149,9 @@ tags: [backend, api, go, cloud-run]
 **Behavior**:
 
 - THE SYSTEM SHALL return exactly 10 items per page (fixed, not configurable by the client).
-- THE SYSTEM SHALL sort results by `date_updated` in descending order (most recently updated first). This is the only sort order; no `sort_by` or `sort_order` parameters are accepted.
+- THE SYSTEM SHALL sort results by `date_updated` in descending order (most recently updated first) when no search query (`q`) is present. When `q` is present, results are sorted by vector similarity (cosine distance ascending). This is the only sort order; no `sort_by` or `sort_order` parameters are accepted.
+- WHEN the `q` parameter is present, THE SYSTEM SHALL use vector similarity search (see **Vector Search Flow** below) instead of text search.
+- WHEN the `q` parameter is NOT present, THE SYSTEM SHALL query Firestore Enterprise directly, applying any filters (category, tags, date range).
 - IF the search/filter yields no results, THE SYSTEM SHALL return `200` with an empty `items` array and `pagination.total_items` of `0`. Example response:
 
 ```json
@@ -163,6 +167,24 @@ tags: [backend, api, go, cloud-run]
 ```
 
 - Reserve `404` for truly missing individual resources (e.g., invalid slug in detail endpoints like `GET /technical/{slug}.md`).
+
+**Vector Search Flow** (when `q` parameter is present):
+
+THE SYSTEM SHALL execute the following steps when processing a search query:
+
+1. **Normalize**: Convert the search query to lowercase.
+2. **Generate cache key**: Compute UUID v5 from the lowercased query using the URL namespace (`6ba7b811-9dad-11d1-80b4-00c04fd430c8`) and the lowercased query as the name.
+3. **Check embedding cache**: Look up the UUID in the `embedding_cache` collection (DM-011) in Firestore Enterprise.
+   - **Cache hit**: Use the cached embedding vector.
+   - **Cache miss**: Call Vertex AI Gemini `text-embedding-004` API with `task_type=RETRIEVAL_QUERY` to generate a 768-dimensional embedding vector. Store the UUID and vector in the `embedding_cache` collection (no search string stored). No cache expiration.
+4. **Vector search**: Query the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors` — see DM-012) using the embedding vector with `findNearest()` (cosine distance). Exclude results with cosine distance > **0.35** (configurable threshold — see AD-020).
+5. **Apply filters**: If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), query Firestore Enterprise with the candidate document IDs from step 4 AND the filter criteria applied. If no filters, retrieve full documents from Firestore Enterprise by document IDs.
+6. **Sort**: Sort results by cosine distance ascending (most similar first).
+7. **Paginate**: Apply frontend pagination (page number × page size of 10) to the filtered result set. Compute `total_items` and `total_pages` from the filtered set.
+
+> **Note**: When `q` is present without filters, the system maps the frontend page number directly to Firestore Native vector search pagination (offset/limit). When `q` is present with filters, the system fetches all candidate IDs within the distance threshold (up to a hard limit of 500), filters in Firestore Enterprise, and paginates the filtered results.
+
+> **Reference — Distance Threshold**: The default cosine distance threshold of 0.35 (cosine similarity ≥ 0.65) balances recall and precision for semantic article search. This value should be validated empirically with real content and tuned if needed. See: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings and https://firebase.google.com/docs/firestore/vector-search
 
 ---
 
@@ -247,7 +269,7 @@ tags: [backend, api, go, cloud-run]
 
 **Behavior**: Identical to BE-API-002 but queries the blog/opinions table instead of the technical table.
 
-All query parameters, validation rules, response format, and error handling are the same as BE-API-002.
+All query parameters, validation rules, response format, error handling, and **vector search flow** (when `q` is present) are the same as BE-API-002. The vector search queries the `blog_article_vectors` Firestore Native collection instead of `technical_article_vectors`.
 
 ---
 
@@ -302,7 +324,7 @@ All path parameters, validation rules, response format (including `text/markdown
 
 **Description**: Returns a paginated list of external/notable content.
 
-**Behavior**: Identical to BE-API-002 in terms of query parameters, pagination, validation, and error handling, but queries the "others" collection. Date range filter applies to `date_updated`.
+**Behavior**: Identical to BE-API-002 in terms of query parameters, pagination, validation, error handling, and **vector search flow** (when `q` is present), but queries the "others" collection. The vector search queries the `others_vectors` Firestore Native collection. Date range filter applies to `date_updated`.
 
 **Response item differences**:
 

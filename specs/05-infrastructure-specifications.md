@@ -1,10 +1,10 @@
 ---
 title: Infrastructure Specifications
-version: 1.8
+version: 1.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio]
+tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai]
 ---
 
 ## Infrastructure Specifications
@@ -364,6 +364,110 @@ ENTRYPOINT ["/server"]
 
 ---
 
+#### INFRA-012: Firestore Native Mode Instance (Vector Search)
+
+**Purpose**: Provide a Firestore Native Mode database for vector similarity search on article embeddings. This is separate from the Firestore Enterprise instance (MongoDB compat mode) used for application data.
+
+**Configuration**:
+
+| Setting                  | Value                                              |
+| ------------------------ | -------------------------------------------------- |
+| Database mode            | Firestore Native Mode                              |
+| Database ID              | `vector-search` (named database, not `(default)`)  |
+| Region                   | `asia-southeast1`                                  |
+| Collections              | `technical_article_vectors`, `blog_article_vectors`, `others_vectors` |
+| Vector indexes           | One per collection on `embedding` field (768 dimensions, COSINE) |
+
+**Vector Index Configuration** (per collection):
+
+```
+gcloud firestore indexes composite create \
+  --database=vector-search \
+  --collection-group=technical_article_vectors \
+  --field-config=vector-config='{"dimension":768,"flat":{}}',field-path=embedding
+```
+
+> Repeat for `blog_article_vectors` and `others_vectors`.
+
+**Notes**:
+- Firestore Native Mode is required for vector search (`findNearest()` API). Firestore Enterprise in MongoDB compat mode does not support native vector search.
+- Both Firestore instances coexist in the same GCP project. The default database hosts Firestore Enterprise; the named database (`vector-search`) hosts Firestore Native.
+- Reference: https://firebase.google.com/docs/firestore/vector-search
+
+---
+
+#### INFRA-013: Vertex AI — Gemini Embedding API
+
+**Purpose**: Generate text embeddings using the Gemini `text-embedding-004` model for semantic search.
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| API                  | Vertex AI Embeddings API                           |
+| Model                | `text-embedding-004`                               |
+| Region               | `asia-southeast1`                                  |
+| Output dimensions    | 768                                                |
+| Task types used      | `RETRIEVAL_QUERY` (search queries), `RETRIEVAL_DOCUMENT` (article indexing) |
+
+**API Endpoint**:
+```
+POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/locations/asia-southeast1/publishers/google/models/text-embedding-004:predict
+```
+
+**Usage**:
+
+| Caller                                | Task Type            | Purpose                                    |
+| ------------------------------------- | -------------------- | ------------------------------------------ |
+| Cloud Run (Go API)                    | `RETRIEVAL_QUERY`    | Embed search queries on cache miss         |
+| `sync-article-embeddings` (INFRA-014) | `RETRIEVAL_DOCUMENT` | Embed article content during sync          |
+
+**Cost Considerations**:
+- Pricing: per 1,000 characters of input text. See: https://cloud.google.com/vertex-ai/generative-ai/pricing
+- The embedding cache (DM-011) eliminates redundant API calls for repeated search queries.
+- Article embeddings are generated once per content change (not per request).
+
+**Reference**: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings
+
+---
+
+#### INFRA-014: Cloud Function — `sync-article-embeddings`
+
+**Purpose**: Generate and synchronize article embedding vectors from Firestore Enterprise to Firestore Native Mode. Called by the content management CI/CD pipeline after articles are pushed to Firestore Enterprise.
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Function name        | `sync-article-embeddings`                          |
+| Runtime              | Node.js (Cloud Functions Gen 2)                    |
+| Region               | `asia-southeast1`                                  |
+| Memory               | 512 MB                                             |
+| Timeout              | 300 seconds (5 minutes)                            |
+| Trigger              | HTTP (invoked by content CI/CD pipeline)            |
+| Ingress              | Internal only (no public access)                   |
+| VPC connector        | Connected to the project VPC (see INFRA-009) — Production only |
+| Authentication       | Requires authentication (service account with appropriate roles) |
+
+**Sync Logic**:
+
+1. Read all articles from `technical_articles`, `blog_articles`, and `others` collections in Firestore Enterprise (via MongoDB driver or admin SDK).
+2. For each article, construct the embedding source text: `title + "\n" + abstract + "\n" + category + "\n" + tags (comma-separated)`.
+3. Compute SHA-256 hash of the source text.
+4. Compare the hash with the `embedding_text_hash` field in the corresponding Firestore Native document.
+   - **If unchanged**: Skip (no re-embedding needed).
+   - **If changed or new**: Call Gemini `text-embedding-004` API with `task_type=RETRIEVAL_DOCUMENT` to generate a 768-dimensional embedding vector.
+5. Write/update the vector document in the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors`).
+6. Delete vector documents from Firestore Native that no longer have corresponding articles in Firestore Enterprise (orphan cleanup).
+
+**Notes**:
+- This function is idempotent. Running it multiple times produces the same result.
+- The hash-based change detection avoids unnecessary Gemini API calls, reducing cost.
+- The content CI/CD pipeline SHOULD call this function after successfully pushing content to Firestore Enterprise.
+- The function MAY also be triggered by Cloud Scheduler as a periodic safety net (e.g., daily) to catch any missed syncs.
+
+---
+
 #### INFRA-010: BigQuery Analytics Dataset & Log Sinks
 
 **Purpose**: Route Cloud Logging logs to BigQuery for long-term storage, SQL-based analytics, and integration with Looker Studio dashboards.
@@ -571,7 +675,28 @@ Cloud Scheduler ───────▶│  │Cloud Function │             �
 Cloud Armor Log Sink ──▶│  │Cloud Function │             │
                         │  │(Log Proc.)    │             │
                         │  └───────────────┘             │
+                        │                                │
+                        │  ┌───────────────┐             │
+Content CI/CD ─────────▶│  │Cloud Function │             │
+                        │  │(Embed Sync)   │             │
+                        │  └───────┬───────┘             │
+                        └──────────│─────────────────────┘
+                                   │
+                        ┌──────────▼─────────────────────┐
+                        │   Firestore Native Mode        │
+                        │   (Vector Search)              │
+                        │   asia-southeast1              │
                         └────────────────────────────────┘
+                                   ▲
+                        Cloud Run + Embed Sync
+                        query/write vectors
+                        ┌────────────────────────────────┐
+                        │   Vertex AI (Gemini)           │
+                        │   text-embedding-004           │
+                        └────────────────────────────────┘
+                                   ▲
+                        Cloud Run + Embed Sync
+                        call for embeddings
 
               Cloud Logging (receives all service logs)
                            │
