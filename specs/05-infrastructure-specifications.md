@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 1.4
+version: 1.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -252,7 +252,7 @@ ENTRYPOINT ["/server"]
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
 | Function name        | `generate-sitemap`                                 |
-| Runtime              | Go (Cloud Functions Gen 2)                         |
+| Runtime              | Node.js (Cloud Functions Gen 2)                    |
 | Region               | `asia-southeast1`                                  |
 | Memory               | 256 MB                                             |
 | Timeout              | 60 seconds                                         |
@@ -299,7 +299,7 @@ ENTRYPOINT ["/server"]
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
 | Function name        | `process-rate-limit-logs`                          |
-| Runtime              | Go (Cloud Functions Gen 2)                         |
+| Runtime              | Node.js (Cloud Functions Gen 2)                    |
 | Region               | `asia-southeast1`                                  |
 | Memory               | 256 MB                                             |
 | Timeout              | 60 seconds                                         |

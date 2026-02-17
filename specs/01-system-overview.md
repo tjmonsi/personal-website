@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 1.4
+version: 1.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -19,8 +19,8 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | -------------- | -------------------------------------- | ---------------------------------------- |
 | Frontend       | Nuxt 4 / Vue 3 / Vite (SPA mode)      | Firebase Hosting + Firebase Functions    |
 | Backend API    | Go                                     | Google Cloud Run (asia-southeast1)       |
-| Sitemap Gen    | Go (Cloud Functions Gen 2)             | Google Cloud Functions (asia-southeast1) |
-| Log Processing | Go (Cloud Functions Gen 2)             | Google Cloud Functions (asia-southeast1) |
+| Sitemap Gen    | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
+| Log Processing | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
 | Database       | Firestore Enterprise (MongoDB compatibility mode) | Google Cloud (asia-southeast1)  |
 | CDN / WAF      | Google Cloud Load Balancer + Cloud Armor | Google Cloud                           |
 | Networking     | VPC with Private Google Access         | Google Cloud (asia-southeast1)           |
@@ -94,7 +94,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
                          │               ▲                  │
                          │  ┌────────────┴───────────────┐  │
 Cloud Scheduler ────────▶│  │  Cloud Function (Gen 2)    │  │
-                         │  │  Sitemap Generation (Go)   │  │
+                         │  │  Sitemap Generation       │  │
                          │  └────────────────────────────┘  │
                          │                                   │
                          │  ┌────────────────────────────┐  │
@@ -120,7 +120,7 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 | AD-009 | Frontend SPA with offline reading support      | Not installable as PWA, but supports offline reading via smart prefetching and manual article saving in the browser |
 | AD-010 | Free-form categories derived from articles     | Categories are stored in a dedicated collection and synced from article metadata. Frontend caches categories in sessionStorage for 24 hours. |
 | AD-011 | VPC with Private Google Access                  | Cloud Run and Cloud Functions connect to Firestore via VPC, restricting egress to Google Cloud APIs only. No NAT router needed — minimizes cost and attack surface. |
-| AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Go), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
+| AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Node.js), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 | AD-014 | Cloud Function for offense tracking from Cloud Armor logs | A log sink routes Cloud Armor rate-limit (429) events to a Cloud Function, which writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor's request-level rate limiting and the application's progressive banning logic. |
 | AD-015 | Cloud Armor Adaptive Protection enabled           | Cloud Armor's adaptive protection provides automatic, ML-based escalating DDoS mitigation. This complements application-level progressive banning with infrastructure-level protection that requires no manual rule updates. |
@@ -132,8 +132,8 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 - **Domain**: `tjmonsi.com` (frontend), `api.tjmonsi.com` (backend API)
 - **VPC**: `personal-website-vpc` in `asia-southeast1` with minimum subnets for Cloud Run and Cloud Functions connectors. Private Google Access enabled; no NAT router.
 - **Cloud Run**: Min instances = 0 (scale to zero), Max instances = TBD based on budget
-- **Cloud Functions**: Sitemap generation function (Gen 2, Go) running internally in `asia-southeast1`
-- **Cloud Functions**: Log processing function (Gen 2, Go) triggered by Cloud Armor log sink in `asia-southeast1`
+- **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
+- **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink in `asia-southeast1`
 - **Firebase Hosting**: Global CDN distribution for static assets
 - **Firebase Functions**: Serves the Nuxt 4 SPA shell
 - **Database**: Same region as Cloud Run (`asia-southeast1`) for low latency
