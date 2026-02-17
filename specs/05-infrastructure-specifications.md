@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 1.2
+version: 1.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -33,6 +33,26 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore]
   - JS/CSS/assets with hash: `Cache-Control: public, max-age=31536000, immutable`
   - Images: `Cache-Control: public, max-age=86400`
 - Firebase Functions handles SPA serving (all non-asset routes serve the SPA shell)
+- **Rewrite rules** (`firebase.json`):
+  - `/sitemap.xml` SHALL be rewritten to the Cloud Run backend service to proxy `tjmonserrat.com/sitemap.xml` → `GET /sitemap.xml` on the backend API.
+
+  ```json
+  {
+    "hosting": {
+      "rewrites": [
+        {
+          "source": "/sitemap.xml",
+          "run": {
+            "serviceId": "<cloud-run-service-name>",
+            "region": "asia-southeast1"
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+  - This ensures the sitemap URL declared in `robots.txt` (`https://tjmonserrat.com/sitemap.xml`) is accessible on the frontend domain while being served by the backend.
 
 ---
 
@@ -70,6 +90,7 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore]
 | Request timeout      | 30 seconds                      |
 | Startup CPU boost    | Enabled                         |
 | Ingress              | Internal + Cloud Load Balancing |
+| VPC connector        | Connected to `personal-website-vpc` (see INFRA-009) |
 
 **Docker Image**:
 
@@ -118,8 +139,9 @@ ENTRYPOINT ["/server"]
 
 | Rule Priority | Description                              | Action    |
 | ------------- | ---------------------------------------- | --------- |
+| 500           | Block public access to `/health`         | Deny (403)|
 | 1000          | Block known malicious IP ranges          | Deny      |
-| 2000          | Rate limiting (per IP)                   | Throttle  |
+| 2000          | Rate limiting (60 req/min per IP)        | Throttle  |
 | 3000          | Block SQL injection patterns             | Deny      |
 | 4000          | Block XSS patterns                       | Deny      |
 | 5000          | Block path traversal attempts            | Deny      |
@@ -128,14 +150,10 @@ ENTRYPOINT ["/server"]
 **Rate Limiting at Cloud Armor level**:
 
 - **Primary rate limiting enforcement**: Cloud Armor handles per-IP rate limiting at the load balancer level. This eliminates the need for application-level in-memory rate counters, which would not persist across Cloud Run instance scaling events.
-- Threshold: 120 requests per minute per IP (2x the application-level conceptual limit, as a coarse first line of defense)
-- Action: HTTP `429` response
-- Cloud Armor rate limiting configuration maps to the application-level rate tiers:
-  - Regular users: 60 req/min
-  - Known bots: 10 req/min
-  - Tracking/error (`POST /t`): 30 req/min
+- **Single rate limit tier**: 60 requests per minute per IP for all clients and all endpoints. No differentiation between user types, bot detection tiers, or endpoint-specific limits.
+- Action: HTTP `429` response with `Retry-After` header when limits are exceeded.
 - **Progressive banning**: Offender records and ban state are stored in Firestore (`rate_limit_offenders` collection, DM-009). The Go application checks Firestore for ban status on each request and enforces progressive banning logic (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)).
-- Note: Cloud Armor provides the coarse rate limiting layer; the application reads offender state from Firestore to enforce progressive banning tiers (429 → 403 → 404).
+- Note: Cloud Armor provides the rate limiting layer; the application reads offender state from Firestore to enforce progressive banning tiers (429 → 403 → 404).
 
 ---
 
@@ -201,35 +219,84 @@ ENTRYPOINT ["/server"]
 
 ---
 
-#### INFRA-008: Google Cloud Scheduler
+#### INFRA-008: Sitemap Generation (Cloud Function + Cloud Scheduler)
 
 **Purpose**: Periodically regenerate the sitemap and store it in Firestore for serving via the `GET /sitemap.xml` API endpoint.
+
+##### INFRA-008a: Cloud Function — `generate-sitemap`
+
+**Purpose**: Internal Cloud Function that generates the sitemap XML from article data in Firestore.
 
 **Configuration**:
 
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
-| Job name             | `generate-sitemap`                                 |
-| Schedule             | Every 6 hours (`0 */6 * * *`)                      |
-| Target               | Cloud Run backend API (internal HTTPS endpoint)    |
-| HTTP method          | POST                                               |
-| Target URL           | Internal endpoint on Cloud Run (e.g., `POST /internal/generate-sitemap`) |
-| Authentication       | OIDC token (service account with Cloud Run invoker role) |
+| Function name        | `generate-sitemap`                                 |
+| Runtime              | Go (Cloud Functions Gen 2)                         |
 | Region               | `asia-southeast1`                                  |
-| Retry config         | Max 3 retries with exponential backoff             |
+| Memory               | 256 MB                                             |
+| Timeout              | 60 seconds                                         |
+| Trigger              | HTTP (invoked by Cloud Scheduler)                  |
+| Ingress              | Internal only (no public access)                   |
+| VPC connector        | Connected to the project VPC (see INFRA-009)       |
+| Authentication       | Requires authentication (OIDC token from Cloud Scheduler service account) |
 
-**Sitemap Generation Logic** (executed by the Go backend when triggered):
+**Sitemap Generation Logic**:
 
 1. Query all published articles from `technical_articles` and `blog_articles` collections.
-2. Query all items from the `others` collection.
-3. Include static pages: `/`, `/technical`, `/blog`, `/socials`, `/others`.
+2. Include static pages: `/`, `/technical`, `/blog`, `/socials`, `/others`, `/privacy`.
+3. Article URLs SHALL include the `.md` extension (e.g., `https://tjmonserrat.com/technical/article-title-2025-01-15-1030.md`).
 4. Build sitemap XML per the [Sitemaps protocol](https://www.sitemaps.org/protocol.html).
 5. Write the generated XML to the `sitemap` Firestore collection (DM-010).
 6. The `GET /sitemap.xml` public endpoint reads from this collection (BE-API-011).
 
+##### INFRA-008b: Cloud Scheduler — `trigger-sitemap-generation`
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Job name             | `trigger-sitemap-generation`                       |
+| Schedule             | Every 6 hours (`0 */6 * * *`)                      |
+| Target               | Cloud Function `generate-sitemap` (HTTP trigger)   |
+| HTTP method          | POST                                               |
+| Authentication       | OIDC token (service account with Cloud Functions invoker role) |
+| Region               | `asia-southeast1`                                  |
+| Retry config         | Max 3 retries with exponential backoff             |
+
 **Notes**:
-- The internal endpoint (`POST /internal/generate-sitemap`) SHALL NOT be exposed to public traffic via the Load Balancer. It SHALL only be callable by Cloud Scheduler using OIDC authentication.
+- The Cloud Function runs internally only and is NOT accessible from the public internet.
 - The 6-hour schedule balances freshness with cost. Adjust based on content update frequency.
+
+---
+
+#### INFRA-009: VPC Network
+
+**Purpose**: Provide private networking for Cloud Run and Cloud Functions, restricting egress to Google Cloud APIs only.
+
+**Configuration**:
+
+| Setting                  | Value                                              |
+| ------------------------ | -------------------------------------------------- |
+| VPC name                 | `personal-website-vpc`                             |
+| Region                   | `asia-southeast1`                                  |
+| Subnet (Cloud Run)       | Minimum subnet (e.g., `/28`) for Cloud Run VPC connector |
+| Subnet (Cloud Functions) | Minimum subnet (e.g., `/28`) for Cloud Functions VPC connector |
+| Private Google Access    | Enabled (allows access to Google Cloud APIs without public IPs) |
+| NAT                      | None (no Cloud NAT router)                         |
+| Firewall rules           | Default deny egress to internet; allow egress to Google Cloud API ranges only |
+
+**VPC Connectors**:
+
+- **Cloud Run VPC connector**: Connects the Go backend API (INFRA-003) to the VPC. Enables private access to Firestore Enterprise and other Google Cloud services.
+- **Cloud Functions VPC connector**: Connects the sitemap generation Cloud Function (INFRA-008a) to the VPC. Enables private access to Firestore Enterprise.
+
+**Network Policy**:
+
+- Cloud Run and Cloud Functions SHALL route all egress traffic through the VPC.
+- Egress SHALL be restricted to Google Cloud API endpoints only (via Private Google Access).
+- No outbound internet access is required — all external dependencies are Google Cloud services.
+- No Cloud NAT router is provisioned to minimize cost and attack surface.
 
 ---
 
@@ -260,19 +327,25 @@ ENTRYPOINT ["/server"]
                   │         │
         ┌─────────┘         └─────────┐
         ▼                             ▼
-┌───────────────┐           ┌───────────────┐
-│   Firebase    │           │   Cloud Run   │
-│   Hosting +   │           │   (Go API)    │
-│   Functions   │           │   asia-se1    │
-│   (SPA)       │           │   0-N inst.   │
-└───────────────┘           └───────┬───────┘
-                                    │
-                                    ▼
-                            ┌───────────────┐
-                            │   Firestore   │
-                            │   Enterprise  │
-                            │   (MongoDB    │
-                            │   compat)     │
-                            │   asia-se1    │
-                            └───────────────┘
+┌───────────────┐       ┌──── VPC (asia-southeast1) ────┐
+│   Firebase    │       │                                │
+│   Hosting +   │       │  ┌───────────────┐             │
+│   Functions   │       │  │   Cloud Run   │             │
+│   (SPA)       │       │  │   (Go API)    │             │
+│               │       │  │   0-N inst.   │             │
+│  Rewrites:    │       │  └───────┬───────┘             │
+│  /sitemap.xml─│───────│──────────┘                     │
+└───────────────┘       │          │                      │
+                        │          ▼                      │
+                        │  ┌───────────────┐             │
+                        │  │   Firestore   │             │
+                        │  │   Enterprise  │             │
+                        │  │   asia-se1    │             │
+                        │  └───────┬───────┘             │
+                        │          ▲                      │
+                        │  ┌───────┴───────┐             │
+Cloud Scheduler ───────▶│  │Cloud Function │             │
+                        │  │(Sitemap Gen)  │             │
+                        │  └───────────────┘             │
+                        └────────────────────────────────┘
 ```

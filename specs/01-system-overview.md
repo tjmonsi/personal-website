@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 1.2
+version: 1.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -19,8 +19,11 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | -------------- | -------------------------------------- | ---------------------------------------- |
 | Frontend       | Nuxt 4 / Vue 3 / Vite (SPA mode)      | Firebase Hosting + Firebase Functions    |
 | Backend API    | Go                                     | Google Cloud Run (asia-southeast1)       |
+| Sitemap Gen    | Go (Cloud Functions Gen 2)             | Google Cloud Functions (asia-southeast1) |
 | Database       | Firestore Enterprise (MongoDB compatibility mode) | Google Cloud (asia-southeast1)  |
 | CDN / WAF      | Google Cloud Load Balancer + Cloud Armor | Google Cloud                           |
+| Networking     | VPC with Private Google Access         | Google Cloud (asia-southeast1)           |
+| Scheduling     | Google Cloud Scheduler                 | Google Cloud (asia-southeast1)           |
 | Observability  | Google Cloud Logging + Cloud Monitoring | Google Cloud                            |
 
 ### Definitions
@@ -33,6 +36,9 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Cloud Run                       | Google Cloud's serverless container hosting platform |
 | Cloud Armor                     | Google Cloud's WAF and DDoS protection service |
 | Firebase Functions              | Cloud Functions integrated with Firebase, used here to serve the Nuxt 4 SPA |
+| Cloud Functions Gen 2           | Google Cloud's second-generation serverless functions platform, built on Cloud Run infrastructure. Used here for internal sitemap generation. |
+| VPC                             | Virtual Private Cloud — isolated network environment for Google Cloud resources |
+| Cloud Scheduler                 | Google Cloud's managed cron job service for scheduling periodic tasks |
 
 ### High-Level Architecture
 
@@ -56,29 +62,39 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 └──────────┬──────────────────────────────┬───────────────┘
            │                              │
            ▼                              ▼
-┌─────────────────────┐     ┌────────────────────────────┐
-│  Firebase Hosting   │     │   Google Cloud Run          │
-│  + Functions        │     │   (Go API)                 │
-│  (Nuxt 4 SPA)       │     │   api.tjmonserrat.com      │
-│                     │     │                            │
-│  tjmonserrat.com    │     │  GET  /                    │
-│                     │     │  GET  /technical            │
-│  Static assets +    │     │  GET  /technical/{slug}.md  │
-│  SPA serving via    │     │  GET  /blog                 │
-│  Firebase Functions │     │  GET  /blog/{slug}.md       │
-│                     │     │  GET  /socials              │
-│                     │     │  GET  /others               │
-│                     │     │  GET  /categories           │
-│                     │     │  GET  /sitemap.xml          │
-│                     │     │  POST /t                    │
-└─────────────────────┘     └─────────────┬──────────────┘
-                                          │
-                                          ▼
-                            ┌────────────────────────────┐
-                            │  Firestore Enterprise      │
-                            │  (MongoDB compat mode)     │
-                            │  asia-southeast1           │
-                            └────────────────────────────┘
+┌─────────────────────┐  ┌──── VPC (asia-southeast1) ─────┐
+│  Firebase Hosting   │  │                                 │
+│  + Functions        │  │  ┌────────────────────────────┐ │
+│  (Nuxt 4 SPA)       │  │  │   Google Cloud Run          │ │
+│                     │  │  │   (Go API)                 │ │
+│  tjmonserrat.com    │  │  │   api.tjmonserrat.com      │ │
+│                     │  │  │                            │ │
+│  Rewrites:          │  │  │  GET  /                    │ │
+│  /sitemap.xml ──────│──│──│▶ GET  /sitemap.xml          │ │
+│                     │  │  │  GET  /technical            │ │
+│  Pages:             │  │  │  GET  /technical/{slug}.md  │ │
+│  /                  │  │  │  GET  /blog                 │ │
+│  /technical         │  │  │  GET  /blog/{slug}.md       │ │
+│  /technical/:s.md   │  │  │  GET  /socials              │ │
+│  /blog              │  │  │  GET  /others               │ │
+│  /blog/:slug.md     │  │  │  GET  /categories           │ │
+│  /socials           │  │  │  GET  /robots.txt           │ │
+│  /others            │  │  │  GET  /health (internal)    │ │
+│  /privacy           │  │  │  POST /t                    │ │
+└─────────────────────┘  │  └─────────────┬──────────────┘ │
+                         │                │                 │
+                         │                ▼                 │
+                         │  ┌────────────────────────────┐  │
+                         │  │  Firestore Enterprise      │  │
+                         │  │  (MongoDB compat mode)     │  │
+                         │  │  asia-southeast1           │  │
+                         │  └────────────┬───────────────┘  │
+                         │               ▲                  │
+                         │  ┌────────────┴───────────────┐  │
+Cloud Scheduler ────────▶│  │  Cloud Function (Gen 2)    │  │
+                         │  │  Sitemap Generation (Go)   │  │
+                         │  └────────────────────────────┘  │
+                         └──────────────────────────────────┘
 ```
 
 ### Key Architectural Decisions
@@ -95,13 +111,18 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | AD-008 | Content managed via separate Git repository    | Articles and content are maintained in a dedicated repo; a CI/CD pipeline pushes content to the database on merge. Keeps the public API read-only. |
 | AD-009 | Frontend SPA with offline reading support      | Not installable as PWA, but supports offline reading via smart prefetching and manual article saving in the browser |
 | AD-010 | Free-form categories derived from articles     | Categories are stored in a dedicated collection and synced from article metadata. Frontend caches categories in sessionStorage for 24 hours. |
+| AD-011 | VPC with Private Google Access                  | Cloud Run and Cloud Functions connect to Firestore via VPC, restricting egress to Google Cloud APIs only. No NAT router needed — minimizes cost and attack surface. |
+| AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Go), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
+| AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 
 ### Deployment Topology
 
 - **Region (Firestore)**: `asia-southeast1`
 - **Region (Cloud Run)**: `asia-southeast1`
 - **Domain**: `tjmonserrat.com` (frontend), `api.tjmonserrat.com` (backend API)
+- **VPC**: `personal-website-vpc` in `asia-southeast1` with minimum subnets for Cloud Run and Cloud Functions connectors. Private Google Access enabled; no NAT router.
 - **Cloud Run**: Min instances = 0 (scale to zero), Max instances = TBD based on budget
+- **Cloud Functions**: Sitemap generation function (Gen 2, Go) running internally in `asia-southeast1`
 - **Firebase Hosting**: Global CDN distribution for static assets
 - **Firebase Functions**: Serves the Nuxt 4 SPA shell
 - **Database**: Same region as Cloud Run (`asia-southeast1`) for low latency

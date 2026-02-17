@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.2
+version: 1.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -79,13 +79,14 @@ tags: [frontend, nuxt4, vue3, spa]
 
 ---
 
-#### FE-PAGE-003: Technical Blog Article (`/technical/:slug`)
+#### FE-PAGE-003: Technical Blog Article (`/technical/:slug.md`)
 
-**Description**: Full article view with table of contents, metadata, and citation format selector.
+**Description**: Full article view with table of contents, metadata, and citation format selector. The URL includes the `.md` extension, presenting the page as if accessing a markdown file directly.
 
 **Requirements**:
 
-- WHEN the user visits `/technical/:slug`, THE SYSTEM SHALL fetch and display the article from `GET /technical/{slug}.md`.
+- WHEN the user visits `/technical/:slug.md`, THE SYSTEM SHALL fetch and display the article from `GET /technical/{slug}.md`.
+- THE SYSTEM SHALL parse the YAML front matter from the `text/markdown` response to extract metadata (title, author, category, tags, changelog, citations) and render the markdown body separately.
 - THE SYSTEM SHALL display article metadata at the top:
   - Title
   - Author ("Written by TJ Monserrat")
@@ -126,13 +127,13 @@ tags: [frontend, nuxt4, vue3, spa]
 
 ---
 
-#### FE-PAGE-005: Opinion Blog Article (`/blog/:slug`)
+#### FE-PAGE-005: Opinion Blog Article (`/blog/:slug.md`)
 
-**Description**: Same structure and behavior as FE-PAGE-003 but for opinion articles.
+**Description**: Same structure and behavior as FE-PAGE-003 but for opinion articles. The URL includes the `.md` extension.
 
 **Requirements**:
 
-- THE SYSTEM SHALL follow the same specifications as FE-PAGE-003 (Technical Blog Article), including citation format selector.
+- THE SYSTEM SHALL follow the same specifications as FE-PAGE-003 (Technical Blog Article), including citation format selector and YAML front matter parsing.
 - THE SYSTEM SHALL fetch data from `GET /blog/{slug}.md` instead of `GET /technical/{slug}.md`.
 
 ---
@@ -219,6 +220,29 @@ tags: [frontend, nuxt4, vue3, spa]
 
 ---
 
+#### FE-PAGE-009: Privacy Policy (`/privacy`)
+
+**Description**: Static privacy policy page describing what data is collected, how it is used, and user rights.
+
+**Requirements**:
+
+- WHEN the user visits `/privacy`, THE SYSTEM SHALL display a static privacy policy page.
+- THE SYSTEM SHALL hardcode the privacy policy content in the frontend (no backend endpoint needed).
+- THE SYSTEM SHALL display a "Last updated" date at the top of the privacy policy.
+- THE SYSTEM SHALL include the following sections in the privacy policy:
+  - **Data We Collect**: IP address (may be truncated), browser name and version, pages visited, referrer URL, connection speed information, and timestamps.
+  - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited. Client-side error reporting for performance monitoring.
+  - **Purpose of Data Collection**: Understanding site usage patterns, monitoring site performance, improving user experience, and detecting abuse.
+  - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond IP and User-Agent, no third-party tracking scripts, no advertising data.
+  - **Data Retention**: Visitor tracking data is automatically deleted after 90 days. Error reports are automatically deleted after 30 days.
+  - **Data Storage**: Data is stored in Google Cloud infrastructure in the `asia-southeast1` region.
+  - **Your Rights**: Users may contact TJ Monserrat to request information about or deletion of any data associated with their IP address.
+  - **Contact**: Link to the socials/contact page (`/socials`) for inquiries.
+  - **Changes to This Policy**: Notice that the policy may be updated, with the last updated date displayed.
+- THE SYSTEM SHALL link the privacy policy from the site footer on all pages.
+
+---
+
 ### Global Components and Behaviors
 
 #### FE-COMP-001: Search Bar
@@ -252,13 +276,30 @@ tags: [frontend, nuxt4, vue3, spa]
 | HTTP Status | User Message                                                                                     |
 | ----------- | ------------------------------------------------------------------------------------------------ |
 | 400         | "Your request couldn't be processed. Please check your input and try again."                     |
+| 403         | "Access to this site has been temporarily restricted."                                            |
 | 404         | "The content you're looking for doesn't exist or has been removed."                              |
 | 405         | "This action is not supported."                                                                  |
 | 429         | "You're making too many requests. Please wait a moment and try again."                           |
 | 503         | "The service is temporarily unavailable. Please try again later."                                |
+| 504         | "TJ has been notified about the server taking too long." + randomized funny message (see below)  |
 | Other       | "Something went wrong. TJ has been notified of this issue."                                      |
 
 - Snackbar SHALL auto-dismiss after 5 seconds or be manually dismissable.
+
+**504 Timeout Funny Messages**:
+
+- THE SYSTEM SHALL display one of the following randomized funny messages alongside the 504 notification ("TJ has been notified about the server taking too long."):
+  1. "The server is still thinking... like that one friend who takes 20 minutes to pick a restaurant."
+  2. "The server took so long, I considered sending a carrier pigeon instead."
+  3. "Plot twist: the server went on a coffee break and forgot to come back."
+  4. "The server is moving at the speed of a sloth on a lazy Sunday."
+  5. "This request took longer than my last software update. And that's saying something."
+  6. "Even dial-up internet is judging how long this is taking."
+  7. "The server is experiencing what philosophers call 'existential delay.'"
+  8. "I asked the server for a response and it gave me a timeout. Rude."
+  9. "The server went to find your data and got lost along the way."
+  10. "At this rate, you could have hand-delivered the request faster."
+- THE SYSTEM SHALL select a message randomly on each 504 occurrence.
 
 ---
 
@@ -306,9 +347,10 @@ tags: [frontend, nuxt4, vue3, spa]
 
 **Requirements**:
 
-- THE SYSTEM SHALL serve a `robots.txt` file at the root of the domain.
+- THE SYSTEM SHALL serve a `robots.txt` file at the root of the frontend domain (`tjmonserrat.com`).
+- THE SYSTEM SHALL deploy `robots.txt` as a static file in Firebase Hosting's `public/` directory, served directly without any rewrite.
 - THE SYSTEM SHALL specify crawl rules and rate limits for bots.
-- THE SYSTEM SHALL block crawlers from API-only paths and tracking endpoints.
+- THE SYSTEM SHALL block crawlers from tracking endpoints.
 - See [07-observability-specifications.md](07-observability-specifications.md) OBS-007 for the full `robots.txt` content.
 
 ---
@@ -343,10 +385,13 @@ tags: [frontend, nuxt4, vue3, spa]
   - **Cache API**: THE SYSTEM SHALL use the Cache API (via service worker) to cache article content HTTP responses. This enables fast retrieval of full article content when offline or on repeat visits.
   - **IndexedDB**: THE SYSTEM SHALL use IndexedDB to store article metadata (title, slug, category, tags, dates, abstract), reading state (e.g., reading progress, last accessed timestamp), and article content as structured data for quick retrieval without requiring a network request via the Cache API.
   - THE SYSTEM SHALL manage storage limits gracefully, removing the oldest cached articles when storage is full.
-- **Offline Retrieval Strategy (Cache-First)**:
+- **Offline Retrieval Strategy (Cache-First with Conditional Requests)**:
   - WHEN navigating to a URL, THE SYSTEM SHALL first check if cached content exists (Cache API for content responses, IndexedDB for metadata).
   - IF cached content exists, THE SYSTEM SHALL render from cache immediately.
-  - IF the device has an active internet connection, THE SYSTEM SHALL check for updated content in the background. IF the content has been updated (based on `date_updated`), THE SYSTEM SHALL update the cache and optionally notify the user that newer content is available.
+  - IF the device has an active internet connection, THE SYSTEM SHALL check for updated content in the background using **conditional requests**:
+    - THE SYSTEM SHALL send `If-None-Match` (with the cached `ETag`) and/or `If-Modified-Since` (with the cached `Last-Modified` date) headers to the backend article detail endpoints (BE-API-003, BE-API-005).
+    - IF the backend returns `304 Not Modified`, the cached content is still current — no download or cache update is needed.
+    - IF the backend returns `200` with updated content, THE SYSTEM SHALL update the cache and optionally notify the user that newer content is available.
   - IF the device is offline and no cached content exists, THE SYSTEM SHALL display a message indicating the article is not available offline.
 
 ---

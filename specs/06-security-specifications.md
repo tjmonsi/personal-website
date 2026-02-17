@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 1.2
+version: 1.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -47,6 +47,8 @@ tags: [security, rate-limiting, cors, authentication]
 - THE SYSTEM SHALL validate `tags` as a comma-separated list of alphanumeric strings with hyphens.
 - THE SYSTEM SHALL reject requests with unknown or malformed query parameters with HTTP `400`.
 
+> **Note**: This strict query parameter validation is intentional. The backend API (`api.tjmonserrat.com`) is not the URL shared on social media — the frontend URL (`tjmonserrat.com`) is. UTM parameters and other tracking query strings on the frontend URL are handled client-side and forwarded to the backend via `POST /t` as tracking data. The backend API expects a strict one-to-one mapping of query parameters for search and pagination purposes only.
+
 ---
 
 ### SEC-002: Rate Limiting
@@ -59,29 +61,23 @@ tags: [security, rate-limiting, cors, authentication]
 
 #### Application-Level Rate Limiting
 
-**Normal Rate Limits** (per IP address):
+**Rate Limit** (per IP address):
 
 | Scope           | Limit                         | Window     |
 | --------------- | ----------------------------- | ---------- |
-| Regular user (all GET endpoints) | 60 req/min    | Per minute |
-| Known bots      | 10 req/min                    | Per minute |
-| Tracking/error (`POST /t`) | 30 req/min           | Per minute |
+| All clients (all endpoints) | 60 req/min    | Per minute |
+
+- A single rate limit of **60 requests per minute per IP** is enforced by Cloud Armor at the load balancer level for all clients and all endpoints. No differentiation between user types, bot tiers, or endpoint-specific limits.
 
 **Rationale**:
-- **60 req/min for regular users**: Generous enough to accommodate shared NAT/ISP IPs where multiple users share a single public IP. Based on common web application rate limiting practices. Reference: [OWASP Rate Limiting Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html)
-- **10 req/min for known bots**: Aligns with standard crawl rates recommended for polite bots. Google recommends no more than one request every few seconds. Reference: [Google Search Central - Crawl Rate](https://developers.google.com/search/docs/crawling-indexing/reduce-crawl-rate)
-- **30 req/min for tracking/error**: Separate bucket prevents tracking calls from consuming user quota. Based on typical single-page application page view rates. Reference: [Cloudflare Rate Limiting Best Practices](https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/)
+- **60 req/min**: Generous enough to accommodate shared NAT/ISP IPs where multiple users share a single public IP, while still providing effective protection against abuse. Based on common web application rate limiting practices. Reference: [OWASP Rate Limiting Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html)
 
-> **Note**: A single IP may represent multiple users (shared ISP NAT). These limits are set to be generous enough to accommodate this while still providing protection.
+> **Note**: A single IP may represent multiple users (shared ISP NAT). This limit is set to be generous enough to accommodate this while still providing protection.
 
-**Rate Limit Headers** (on every response):
+**Rate Limit Headers**:
 
-```
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 45
-X-RateLimit-Reset: 1706140800
-Retry-After: 30  (only on 429 responses)
-```
+- THE SYSTEM SHALL NOT include rate limit counting headers (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`) on responses. Rate counting is handled by Cloud Armor at the load balancer level, and the Go application has no knowledge of per-request counts.
+- Cloud Armor sends its own `429 Too Many Requests` response with `Retry-After` header when limits are exceeded.
 
 **Rate limit response** (`429`):
 
@@ -137,11 +133,11 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 ---
 
-#### Bot-Specific Rate Limiting
+#### Bot Management
 
-- THE SYSTEM SHALL identify bots via User-Agent header analysis.
-- THE SYSTEM SHALL apply separate (potentially stricter) rate limits to known bot User-Agents.
-- THE SYSTEM SHALL respect `robots.txt` crawl-delay directives.
+- THE SYSTEM SHALL rely on `robots.txt` crawl-delay directives to manage bot crawl rates (see OBS-007 in [07-observability-specifications.md](07-observability-specifications.md)).
+- THE SYSTEM SHALL NOT apply separate rate limits to bots — the single 60 req/min rate limit applies to all clients equally.
+- Cloud Armor's built-in bot management capabilities MAY be used for additional protection against malicious bots.
 
 ---
 
@@ -191,7 +187,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 **Security Considerations**:
 
 - This is a "security through obscurity" layer — it raises the bar for abuse but is not impenetrable. A determined attacker could extract the secret from the frontend bundle.
-- Combined with rate limiting on `POST /t` (30 req/min), this provides adequate protection for a personal website.
+- Combined with the standard rate limiting (60 req/min per IP), this provides adequate protection for a personal website.
 - The secret SHALL be rotatable via environment variable changes on both frontend build and backend deployment.
 
 ---
@@ -214,16 +210,61 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 ### SEC-005: HTTP Security Headers
 
-The backend SHALL include the following headers on all responses:
+Security headers SHALL be applied on **both** the frontend (Firebase Hosting) and the backend (Cloud Run), with context-appropriate values for each.
+
+#### Backend API Headers (`api.tjmonserrat.com`)
+
+The backend SHALL include the following headers on all API responses:
 
 | Header                         | Value                                                     |
 | ------------------------------ | --------------------------------------------------------- |
-| `Content-Security-Policy`      | `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonserrat.com` |
+| `Content-Security-Policy`      | `default-src 'none'`                                      |
 | `X-Content-Type-Options`       | `nosniff`                                                 |
 | `X-Frame-Options`              | `DENY`                                                    |
 | `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`                     |
 | `Referrer-Policy`              | `strict-origin-when-cross-origin`                         |
 | `Permissions-Policy`           | `camera=(), microphone=(), geolocation=()`                |
+
+> **Note**: The backend CSP is `default-src 'none'` because API responses (JSON, markdown, XML) do not load sub-resources, execute scripts, or render HTML. A restrictive CSP on the API prevents any unexpected content execution.
+
+#### Frontend Headers (`tjmonserrat.com`)
+
+The frontend SHALL include the following headers via Firebase Hosting `firebase.json` headers configuration:
+
+| Header                         | Value                                                     |
+| ------------------------------ | --------------------------------------------------------- |
+| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonserrat.com; img-src 'self' data:; font-src 'self'` |
+| `X-Content-Type-Options`       | `nosniff`                                                 |
+| `X-Frame-Options`              | `DENY`                                                    |
+| `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`                     |
+| `Referrer-Policy`              | `strict-origin-when-cross-origin`                         |
+| `Permissions-Policy`           | `camera=(), microphone=(), geolocation=()`                |
+
+> **Note**: `'unsafe-inline'` is required for `script-src` because Nuxt 4 SPA builds may inline scripts. If a nonce-based CSP strategy becomes feasible, `'unsafe-inline'` should be replaced with nonce directives. `'unsafe-inline'` for `style-src` allows inline styles used by Vue component frameworks.
+
+**Firebase Hosting Headers Configuration Reference**: Headers are configured in the `firebase.json` file under the `hosting.headers` array. Each entry specifies a `source` glob pattern and a list of `headers` key-value pairs. See: [Firebase Hosting — Configure hosting behavior > Headers](https://firebase.google.com/docs/hosting/full-config#headers)
+
+**Example `firebase.json` headers configuration**:
+
+```json
+{
+  "hosting": {
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+          { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonserrat.com; img-src 'self' data:; font-src 'self'" }
+        ]
+      }
+    ]
+  }
+}
+```
 
 ---
 

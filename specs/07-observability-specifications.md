@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 1.2
+version: 1.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -49,7 +49,7 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 | ------- | --------------------------------------------------------- |
 | DEBUG   | Detailed execution flow (disabled in production)          |
 | INFO    | Normal operations: request completed, cache hit/miss      |
-| WARNING | Non-critical issues: slow query, approaching rate limit   |
+| WARNING | Non-critical issues: slow query, high memory usage           |
 | ERROR   | Failures: database errors, masked 500s                    |
 | CRITICAL| System-level failures: database connection lost           |
 
@@ -142,7 +142,7 @@ const speedInfo = connection ? {
 | ------------------------------ | --------- | ------------------------- | ------------------------------ |
 | `api_requests_total`           | Counter   | method, path, status      | Total API request count        |
 | `api_request_duration_ms`      | Histogram | method, path              | Request latency distribution   |
-| `api_rate_limit_hits_total`    | Counter   | path, client_type         | Rate limit triggers            |
+| `api_rate_limit_hits_total`    | Counter   | path                      | Rate limit triggers (from Cloud Armor logs) |
 | `api_bans_active`              | Gauge     | ban_tier                  | Currently active bans          |
 | `db_query_duration_ms`         | Histogram | collection, operation     | Database query latency         |
 | `db_connection_pool_active`    | Gauge     | —                         | Active DB connections          |
@@ -227,7 +227,7 @@ Sitemap: https://tjmonserrat.com/sitemap.xml
 
 **Notes**:
 - The `robots.txt` is served from the frontend domain (`tjmonserrat.com`).
-- API-only paths (`api.tjmonserrat.com`) are on a separate subdomain. A separate `robots.txt` SHALL be served on `api.tjmonserrat.com`:
+- API-only paths (`api.tjmonserrat.com`) are on a separate subdomain. A separate `robots.txt` SHALL be served on `api.tjmonserrat.com` via `BE-API-012` (see [03-backend-api-specifications.md](03-backend-api-specifications.md)):
 
 ```
 User-agent: *
