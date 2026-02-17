@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 2.8
+version: 2.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -228,12 +228,8 @@ ENTRYPOINT ["/server"]
 - **Structured logging** from Cloud Run (JSON format)
 - **Log retention**: Cloud Logging's default `_Default` bucket with retention configured to **90 days**. No dedicated custom log bucket is provisioned — BigQuery log sinks (INFRA-010) handle long-term analytics and the default bucket provides sufficient operational access for debugging and incident response.
 - **BigQuery log sinks**: Route logs to BigQuery dataset for long-term analytics and SQL querying (see INFRA-010)
-- **Alerts**:
-  - Error rate > 1% of requests over 5 minutes
-  - Latency P95 > 2 seconds over 5 minutes
-  - Cloud Run instance memory > 80%
-  - Any masked 500 error logged
-- **Dashboards**: Request rate, latency, error rate, Cloud Run instance count
+- **Alerts**: See OBS-005 in [07-observability-specifications.md](07-observability-specifications.md) for the complete alerting specification.
+- **Dashboards**: See OBS-006 in [07-observability-specifications.md](07-observability-specifications.md) for the dashboard specification.
 
 ---
 
@@ -354,7 +350,7 @@ ENTRYPOINT ["/server"]
 **Log Sink Configuration**:
 
 - A Cloud Logging log sink SHALL be configured to route Cloud Armor rate-limit events to a Pub/Sub topic.
-- Log sink filter: Cloud Armor logs where the response status is `429` (rate limit exceeded).
+- Log sink filter: `resource.type="http_load_balancer" AND httpRequest.status=429`
 - The Pub/Sub topic triggers the `process-rate-limit-logs` Cloud Function.
 
 **Pub/Sub Configuration**:
@@ -698,7 +694,7 @@ terraform {
 **Scope of Terraform Management**:
 
 Terraform manages GCP resources defined in the spec, including but not limited to:
-- GCP API enablement (via `google_project_service` resources — e.g., `run.googleapis.com`, `cloudfunctions.googleapis.com`, `firestore.googleapis.com`, `compute.googleapis.com`, `aiplatform.googleapis.com`, `dns.googleapis.com`, `artifactregistry.googleapis.com`, `pubsub.googleapis.com`, `firebase.googleapis.com`, `sts.googleapis.com`, `iamcredentials.googleapis.com`, `eventarc.googleapis.com`, etc.)
+- GCP API enablement (via `google_project_service` resources — e.g., `run.googleapis.com`, `cloudfunctions.googleapis.com`, `firestore.googleapis.com`, `compute.googleapis.com`, `aiplatform.googleapis.com`, `dns.googleapis.com`, `artifactregistry.googleapis.com`, `pubsub.googleapis.com`, `firebase.googleapis.com`, `sts.googleapis.com`, `iamcredentials.googleapis.com`, `eventarc.googleapis.com`, `cloudscheduler.googleapis.com`, `bigquery.googleapis.com`, `cloudbuild.googleapis.com`, etc.)
 - Cloud Run services (INFRA-003) — service definition only; image deployment via CI/CD (see Deployment Boundary below)
 - Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014) — function configuration only; code deployment via CI/CD (see Deployment Boundary below)
 - VPC and networking (INFRA-009)

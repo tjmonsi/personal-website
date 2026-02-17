@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.6
+version: 2.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -211,7 +211,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 - **Region (Cloud Run)**: `asia-southeast1`
 - **Domain**: `tjmonsi.com` (frontend), `api.tjmonsi.com` (backend API)
 - **VPC** (Production only): `personal-website-vpc` in `asia-southeast1` with a `/28` subnet for Cloud Run and Cloud Functions Direct VPC Egress. Private Google Access enabled; no NAT router, no Serverless VPC Access Connector. Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc. The Development environment does NOT use a VPC to reduce cost.
-- **Cloud Run**: Min instances = 0 (scale to zero), Max instances = TBD based on budget
+- **Cloud Run**: Min instances = 0 (scale to zero), Max instances = 5
 - **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
 - **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink via Pub/Sub (`rate-limit-events` topic, see INFRA-008c) in `asia-southeast1`
 - **Cloud Functions**: Rate limit offender cleanup function (Gen 2, Node.js) triggered by Cloud Scheduler daily in `asia-southeast1`

@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 2.4
+version: 2.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -276,8 +276,10 @@ const speedInfo = connection ? {
 | High embedding cache miss rate  | `embedding_cache_misses_total` > 50 in 5 min | Email                | Info     |
 | Backend error log               | Any ERROR severity log from Cloud Run backend (INFRA-003) | Email   | Warning  |
 | Cloud Function error log        | Any ERROR severity log from any Cloud Function (INFRA-008a, 008c, 008d, INFRA-014) | Email | Warning |
-| Frontend error log              | Any ERROR severity log posted by frontend via Cloud Logging (OBS-003) | Email | Warning |
+| Frontend error log              | Log entry with `jsonPayload.log_type="frontend_error"` from Cloud Run backend (any severity, matching INFRA-010c sink filter) | Email | Warning |
 | SLI availability breach         | Backend availability SLI drops below 99.9% over 1 hour (see OBS-010) | Email | Critical |
+
+> **Note on alert overlap**: Some generic catch-all alerts ("Backend error log", "Cloud Function error log", "Frontend error log") intentionally overlap with specific alerts (e.g., "Sitemap generation failure", "Masked 500 errors"). This is defense-in-depth — the generic alerts act as a safety net in case a specific alert condition misses an error pattern. For a personal website with email-only notifications, receiving 2 emails per event is an acceptable trade-off for comprehensive coverage.
 
 **Cost**: Cloud Monitoring alerting is free for up to 500 alert policies and up to 6 notification channels. Email notifications have no per-message cost. See [Cloud Monitoring pricing](https://cloud.google.com/stackdriver/pricing).
 
