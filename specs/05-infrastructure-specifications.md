@@ -1,19 +1,21 @@
 ---
 title: Infrastructure Specifications
-version: 2.5
+version: 2.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai]
+tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac]
 ---
 
 ## Infrastructure Specifications
 
 ### Google Cloud Project
 
-- **Project**: *To be created / named*
+- **Project ID**: `<project-id>` *(obfuscated — the GCP project already exists)*
 - **Primary Region**: `asia-southeast1`
-- **Billing**: *Budget to be determined*
+- **Billing**: Linked to billing account
+
+> **Note**: The project ID is obfuscated in this documentation because it may be shared publicly for teaching purposes. Exposing the project ID could be an attack vector (e.g., targeted API abuse, resource enumeration). Replace `<project-id>` with the actual project ID in deployment configurations.
 
 ---
 
@@ -237,7 +239,7 @@ ENTRYPOINT ["/server"]
 
 **Tool**: GitHub Actions (assumed, given `.github/` directory exists)
 
-**Pipeline stages**:
+**Pipeline stages (Application)**:
 
 ```
 ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
@@ -251,6 +253,23 @@ ENTRYPOINT ["/server"]
 | Test    | Vitest (unit), Playwright (E2E) | `go test`                      |
 | Build   | `nuxt generate`                 | Docker build                   |
 | Deploy  | Firebase deploy                 | Cloud Run deploy               |
+
+**Pipeline stages (Infrastructure — Terraform)**:
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  Format  │───▶│ Validate │───▶│   Plan   │───▶│  Apply   │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘
+```
+
+| Stage    | Tool / Command       | Notes                                            |
+| -------- | -------------------- | ------------------------------------------------ |
+| Format   | `terraform fmt`      | Verify formatting consistency                    |
+| Validate | `terraform validate` | Syntax and configuration validation              |
+| Plan     | `terraform plan`     | Preview changes; output saved as artifact        |
+| Apply    | `terraform apply`    | Apply changes to GCP (manual approval required)  |
+
+> **Note**: The Terraform pipeline authenticates using the Terraform service account (SEC-012). The `Apply` stage requires manual approval (e.g., environment protection rules in GitHub Actions) to prevent unintended infrastructure changes. Details to be finalized during implementation.
 
 **Branch strategy**:
 - `main` → Production
@@ -603,6 +622,92 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
 
 ---
 
+#### INFRA-015: Cloud Storage — Terraform State Bucket
+
+**Purpose**: Store Terraform remote state files for infrastructure-as-code management. This bucket is a **manually created bootstrap resource** — it is NOT managed by Terraform itself (chicken-and-egg: Terraform cannot manage the bucket that stores its own state).
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Bucket name          | `<project-id>-tfstate`                             |
+| Region               | `asia-southeast1`                                  |
+| Storage class        | Standard                                           |
+| Versioning           | Enabled (allows state rollback)                    |
+| Public access        | Not public (uniform bucket-level access)           |
+| Lifecycle rules      | None (state files are small and versioned)         |
+| Provisioning         | **Manual** (created by the project owner via Console or `gcloud`) |
+
+**Access Control**:
+
+| Principal                              | Role                           | Purpose                                    |
+| -------------------------------------- | ------------------------------ | ------------------------------------------ |
+| Terraform service account (SEC-012)    | `roles/storage.objectAdmin`   | Read/write state files and lock files      |
+
+**Notes**:
+- The bucket stores only Terraform state (`.tfstate`) and lock files. Expected size: < 1 MB.
+- Versioning is critical for state recovery in case of corruption or accidental overwrites. GCS versioning keeps all prior versions of state files.
+- The bucket name uses the convention `<project-id>-tfstate` for easy identification. Replace `<project-id>` with the actual project ID.
+- No other service or user should have write access to this bucket to prevent state corruption.
+
+---
+
+#### INFRA-016: Terraform — Infrastructure as Code
+
+**Purpose**: Manage GCP infrastructure resources declaratively using Terraform. Configuration files are stored in this repository; state is stored remotely in GCS (INFRA-015).
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Tool                 | Terraform (HashiCorp)                              |
+| Config location      | This repository: `/terraform/` directory           |
+| Remote backend       | GCS bucket `<project-id>-tfstate` (INFRA-015)      |
+| State locking        | GCS-based (built-in with GCS backend)              |
+| Service account      | `terraform-builder@<project-id>.iam.gserviceaccount.com` (SEC-012) |
+| Provisioning (SA)    | **Manual** (service account created by the project owner) |
+
+**Backend Configuration** (expected in `/terraform/backend.tf`):
+
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "<project-id>-tfstate"
+    prefix = "terraform/state"
+  }
+}
+```
+
+**Scope of Terraform Management**:
+
+Terraform manages GCP resources defined in the spec, including but not limited to:
+- Cloud Run services (INFRA-003)
+- Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014)
+- VPC and networking (INFRA-009)
+- Cloud Armor security policies (INFRA-005)
+- Cloud Load Balancer (INFRA-004)
+- Cloud Scheduler jobs (INFRA-008b, INFRA-008d scheduler, INFRA-014b)
+- BigQuery dataset and log sinks (INFRA-010)
+- Firestore Native database (INFRA-012)
+- IAM bindings and service accounts (except bootstrap resources)
+- Cloud DNS (INFRA-006)
+
+**Bootstrap Resources** (manually created, NOT managed by Terraform):
+
+| Resource                       | Reason                                                   |
+| ------------------------------ | -------------------------------------------------------- |
+| GCP Project                    | Must exist before Terraform can run                      |
+| Terraform state bucket (INFRA-015) | Cannot manage its own state storage                  |
+| Terraform service account (SEC-012) | Must exist to authenticate Terraform operations     |
+| Billing account link           | Pre-existing organizational resource                     |
+
+**Notes**:
+- Terraform configuration files will be added to this repository in a subsequent implementation phase. The current phase is documentation only.
+- The `/terraform/` directory structure, module organization, and resource definitions are to be determined during implementation.
+- State locking via GCS prevents concurrent Terraform runs from corrupting state.
+
+---
+
 #### INFRA-010: BigQuery Analytics Dataset & Log Sinks
 
 **Purpose**: Route Cloud Logging logs to BigQuery for long-term storage, SQL-based analytics, and integration with Looker Studio dashboards.
@@ -860,5 +965,19 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
               ┌──────────────────────────────────┐
               │        Looker Studio             │
               │   (Owner-operated analytics)     │
+              └──────────────────────────────────┘
+
+              ┌──────────────────────────────────┐
+              │   Terraform (IaC)                │
+              │   Configs in /terraform/         │
+              │   SA: terraform-builder@         │
+              │      <project-id>                │
+              └────────────┬─────────────────────┘
+                           │ (remote state)
+                           ▼
+              ┌──────────────────────────────────┐
+              │   Cloud Storage                  │
+              │   <project-id>-tfstate           │
+              │   (manually created)             │
               └──────────────────────────────────┘
 ```

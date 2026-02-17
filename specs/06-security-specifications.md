@@ -1,10 +1,10 @@
 ---
 title: Security Specifications
-version: 2.3
+version: 2.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [security, rate-limiting, cors, authentication, vector-search]
+tags: [security, rate-limiting, cors, authentication, vector-search, terraform, iac]
 ---
 
 ## Security Specifications
@@ -25,6 +25,7 @@ tags: [security, rate-limiting, cors, authentication, vector-search]
 | Embedding API abuse           | Embedding cache prevents redundant Gemini API calls; rate limiting on search endpoints | Application + Infrastructure |
 | Vector data exfiltration       | Firestore Native IAM; vectors contain no readable text         | Infrastructure |
 | Compromised CI/CD credentials  | Workload Identity Federation (keyless OIDC auth, no service account keys) | Infrastructure |
+| IaC state/credential exposure   | GCS bucket with versioning, no public access; Terraform SA key not committed to repo; least-privilege IAM | Infrastructure |
 
 ---
 
@@ -431,3 +432,31 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - Embedding vectors are numerical representations and cannot be reverse-engineered to recover the original text.
 - The UUID v5 document IDs are cryptographic hashes (SHA-1 based) and cannot be reversed to the original query text.
 - No additional access controls beyond the existing Cloud Run Firestore Enterprise service account are required for the cache.
+
+---
+
+### SEC-012: Terraform Service Account
+
+**Purpose**: Provide a dedicated, least-privilege service account for Terraform to manage GCP infrastructure resources (INFRA-016). This service account is a **manually created bootstrap resource** — it is NOT managed by Terraform itself. See AD-023 in [01-system-overview.md](01-system-overview.md).
+
+**Service Account**: `terraform-builder@<project-id>.iam.gserviceaccount.com`
+
+**Provisioning**: Manual (created by the project owner via Console or `gcloud`)
+
+**Granted Roles**:
+
+| Role                                | Scope     | Purpose                                           |
+| ----------------------------------- | --------- | ------------------------------------------------- |
+| `roles/storage.objectAdmin`         | Terraform state bucket (INFRA-015) | Read/write Terraform state and lock files |
+| Additional roles                    | Project   | To be determined during implementation — scoped to the minimum required for managing resources defined in INFRA-016 |
+
+> **Note**: The full set of IAM roles for the Terraform service account will be finalized during the implementation phase when the exact Terraform resource definitions are known. Roles will follow the principle of least privilege — only the permissions required to manage the specific resources in the Terraform configuration will be granted.
+
+**Security Constraints**:
+
+- THE SYSTEM SHALL NOT grant the Terraform service account `roles/owner` or `roles/editor`. Only specific, granular roles SHALL be used.
+- THE SYSTEM SHALL NOT commit the service account key (JSON) to any repository. The key SHALL be stored securely by the project owner.
+- The service account key SHALL be used only for local Terraform runs or CI/CD pipeline authentication. For CI/CD, Workload Identity Federation SHOULD be evaluated as a keyless alternative (future improvement).
+- IF the service account key is compromised, THE SYSTEM SHALL revoke the key immediately, generate a new one, and audit recent Terraform state changes.
+- The service account SHALL NOT have access to application data (Firestore Enterprise collections, BigQuery analytics data, etc.) — only infrastructure management permissions.
+- The Terraform state bucket (INFRA-015) SHALL NOT be publicly accessible. Only the Terraform service account SHALL have write access.

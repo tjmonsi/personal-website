@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.3
+version: 2.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -31,6 +31,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Scheduling     | Google Cloud Scheduler                 | Google Cloud (asia-southeast1)           |
 | Observability  | Google Cloud Logging + Cloud Monitoring + BigQuery | Google Cloud                |
 | Analytics      | Looker Studio                          | Google Cloud (owner-operated)            |
+| IaC            | Terraform (HashiCorp)                  | This repository (`/terraform/`)          |
 
 ### Definitions
 
@@ -56,6 +57,9 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | UUID v5                         | A deterministic UUID generated from a namespace UUID and a name string using SHA-1 hashing. The same inputs always produce the same UUID. Used here to derive cache document IDs from search query strings. |
 | Vertex AI                       | Google Cloud's machine learning platform. Used here to access the Gemini `gemini-embedding-001` model for generating text embeddings via the Vertex AI Embeddings API. Auth via IAM (`roles/aiplatform.user`). See: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings |
 | Workload Identity Federation    | A Google Cloud IAM feature that allows external workloads (e.g., GitHub Actions) to authenticate to GCP using short-lived OIDC tokens instead of long-lived service account keys. Used here for the content CI/CD pipeline to invoke the embedding sync Cloud Function (INFRA-014). See: https://cloud.google.com/iam/docs/workload-identity-federation |
+| Terraform                       | An open-source infrastructure-as-code (IaC) tool by HashiCorp for declaratively provisioning and managing cloud resources. Used here to manage GCP infrastructure. Configuration files stored in this repository under `/terraform/`. See: https://www.terraform.io/ |
+| Infrastructure as Code (IaC)    | The practice of managing and provisioning infrastructure through machine-readable definition files rather than manual processes. Enables version control, reproducibility, and auditability of infrastructure changes. |
+| Terraform Remote State          | Terraform state stored in a shared backend (here, GCS bucket INFRA-015) instead of locally, enabling team collaboration and state locking to prevent concurrent modifications. |
 
 ### High-Level Architecture
 
@@ -187,6 +191,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 | AD-020 | Cosine distance threshold for vector search        | Search results with cosine distance > 0.35 (cosine similarity < 0.65) are excluded. This threshold balances recall and precision for semantic article search. Configurable per deployment. Reference: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings |
 | AD-021 | Vector search replaces text search for `q` parameter | When the `q` query parameter is present, the system uses Gemini embedding + Firestore Native vector similarity search instead of MongoDB text indexes. Without `q`, queries use Firestore Enterprise directly. Filtering (category, tags, date range) is always applied in Firestore Enterprise. |
 | AD-022 | Workload Identity Federation for content CI/CD | The content repository's GitHub Actions pipeline authenticates to GCP via Workload Identity Federation (WIF) — no long-lived service account keys. WIF provides OIDC-based authentication to invoke the `sync-article-embeddings` Cloud Function (INFRA-014) after pushing content. Reference: https://cloud.google.com/iam/docs/workload-identity-federation |
+| AD-023 | Terraform for infrastructure management | GCP infrastructure is managed declaratively via Terraform. Configuration files are stored in this repository under `/terraform/`. State is stored remotely in a GCS bucket (INFRA-015) with versioning and locking. The state bucket and Terraform service account are manually created bootstrap resources. Project ID is obfuscated in documentation for security. Reference: https://www.terraform.io/ |
 
 ### Deployment Topology
 
@@ -206,6 +211,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 - **Database**: Same region as Cloud Run (`asia-southeast1`) for low latency
 - **Firestore Native**: Vector search database in `asia-southeast1` with vector indexes on embedding fields (2048 dimensions, cosine distance). Max embedding dimension supported by Firestore Native is 2048. See: https://cloud.google.com/firestore/native/docs/vector-search
 - **Vertex AI**: Gemini `gemini-embedding-001` model in `asia-southeast1` for generating text embeddings via IAM-based auth
+- **Terraform**: Infrastructure managed via Terraform (INFRA-016) with remote state in GCS (INFRA-015). Terraform service account (SEC-012) is manually bootstrapped. Configuration files stored in `/terraform/` directory.
 
 ### Content Management
 
