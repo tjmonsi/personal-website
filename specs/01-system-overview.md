@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.7
+version: 2.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -48,7 +48,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Firebase Functions              | Cloud Functions integrated with Firebase, used here to serve the Nuxt 4 SPA |
 | Cloud Functions Gen 2           | Google Cloud's second-generation serverless functions platform, built on Cloud Run infrastructure. Used here for internal sitemap generation, Cloud Armor log processing, rate limit offender cleanup, and article embedding synchronization. |
 | Log Sink                        | A Cloud Logging export mechanism that routes matching log entries to a destination (e.g., Pub/Sub, Cloud Function) for further processing. Used here to route Cloud Armor rate-limit events to a Cloud Function. |
-| Cloud Armor Adaptive Protection | A Cloud Armor feature that uses machine learning to detect and mitigate L7 DDoS attacks automatically, providing escalating protection without manual rule configuration. |
+| Cloud Armor Adaptive Protection | A Cloud Armor feature (Standard tier) that uses machine learning to detect anomalous L7 traffic patterns and generate recommended protective rules for the owner to review and apply. Automatic rule deployment requires Enterprise tier, which is not used. |
 | VPC                             | Virtual Private Cloud — isolated network environment for Google Cloud resources. Used in Production only; Development does not use a VPC to reduce cost. |
 | Cloud Scheduler                 | Google Cloud's managed cron job service for scheduling periodic tasks |
 | BigQuery                        | Google Cloud's serverless data warehouse for SQL-based log analytics. Used here to store exported Cloud Logging logs for long-term querying and Looker Studio integration. |
@@ -195,7 +195,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 | AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Node.js), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 | AD-014 | Cloud Function for offense tracking from Cloud Armor logs | A log sink routes Cloud Armor rate-limit (429) events to a Cloud Function, which writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor's request-level rate limiting and the application's progressive banning logic. |
-| AD-015 | Cloud Armor Adaptive Protection enabled           | Cloud Armor's adaptive protection provides automatic, ML-based escalating DDoS mitigation. This complements application-level progressive banning with infrastructure-level protection that requires no manual rule updates. |
+| AD-015 | Cloud Armor Adaptive Protection enabled           | Cloud Armor's adaptive protection (Standard tier) provides ML-based DDoS detection with recommended rules that the owner can review and apply. This complements application-level progressive banning with infrastructure-level anomaly detection. Automatic rule enforcement is not available in Standard tier — the owner is alerted and applies suggested rules manually. |
 | AD-016 | BigQuery log sinks for analytics                  | All Cloud Logging logs are exported to a BigQuery dataset (`website_logs`) via 5 dedicated log sinks — enabling SQL-based analytics, up to 2 years of retention, and Looker Studio dashboards without impacting operational logging. IP addresses are truncated before logging to ensure anonymization in BigQuery. |
 | AD-017 | Looker Studio for analytics dashboards            | Owner-operated Looker Studio dashboards connect to BigQuery via a service account with read-only access, providing visitor analytics (unique visitors, page views, referrer sources, etc.) without third-party analytics tools. |
 | AD-018 | Dual-database: Firestore Enterprise + Firestore Native | Firestore Enterprise (MongoDB compat) stores all application data. Firestore Native stores vector embeddings for semantic article search. Two databases in the same project, each optimized for its purpose. The Go API uses the MongoDB Go driver for Enterprise and the Firestore Go SDK for Native. |

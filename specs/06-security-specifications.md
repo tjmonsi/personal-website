@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 2.6
+version: 2.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -62,8 +62,8 @@ tags: [security, rate-limiting, cors, authentication, vector-search, terraform, 
 
 - **Real-time rate counting**: Enforced by **Google Cloud Armor** at the load balancer level (see INFRA-005 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). Cloud Armor handles per-IP request counting and throttling. This avoids the need for in-memory rate counters in the Go application, which would be lost when Cloud Run instances scale down or restart.
 - **Offense tracking via log sink**: A **Cloud Logging log sink** routes Cloud Armor rate-limit (429) events to a **Cloud Function** (`process-rate-limit-logs`, INFRA-008c). The Cloud Function writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor (which blocks requests before they reach Cloud Run) and the application's progressive banning logic.
-- **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The Go application checks Firestore for ban status on each request and enforces progressive banning tiers.
-- **Adaptive protection**: **Cloud Armor Adaptive Protection** is enabled to provide automatic, ML-based escalating DDoS mitigation that complements the application-level progressive banning (see INFRA-005).
+- **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The Go application checks Firestore for ban status on each `GET` and `POST` request and enforces progressive banning tiers. `OPTIONS` preflight requests are exempt from ban checks (consistent with rate-limiting exemption) to avoid CORS preflight failures for banned clients.
+- **Adaptive protection**: **Cloud Armor Adaptive Protection** is enabled to provide ML-based DDoS detection with recommended rules that the owner can review and apply, complementing the application-level progressive banning (see INFRA-005).
 - This multi-layer approach ensures rate limiting works correctly across Cloud Run auto-scaling events while keeping the infrastructure simple (no Redis/Memorystore needed).
 
 #### Application-Level Rate Limiting
@@ -110,8 +110,8 @@ WHEN a client exceeds the rate limit, THE SYSTEM SHALL track it as an "offense."
 | ------------------------------------------------- | --------------------------- | ------------- |
 | Rate limit exceeded (offenses 1–5)                 | Return rate limit response  | `429`         |
 | 5 offenses within 7 days                          | Block for 30 days           | `403`         |
-| 2 offenses after 30-day ban expires               | Block for 90 days           | `404`         |
-| 2 offenses after 90-day ban expires               | Block indefinitely          | `404`         |
+| 2 offenses within 7 days after 30-day ban expires | Block for 90 days           | `404`         |
+| 2 offenses within 7 days after 90-day ban expires | Block indefinitely          | `404`         |
 
 **Blocking behavior**:
 
@@ -287,8 +287,11 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - Allowed origin: `https://tjmonsi.com` (and development environment equivalents)
 - Allowed methods: `GET, POST, OPTIONS`
 - Allowed headers: `Content-Type, Accept, Authorization, If-None-Match, If-Modified-Since`
+- Exposed headers: `ETag, X-Request-ID` (via `Access-Control-Expose-Headers`)
 - Max age: `86400` (1 day)
 - `OPTIONS` preflight requests SHALL return the CORS headers and SHALL NOT be subject to rate limiting.
+
+> **Note**: `ETag` must be explicitly exposed for the frontend to read it from cross-origin responses and use it for conditional requests (`If-None-Match`). `X-Request-ID` is exposed so the frontend can programmatically include it in error reports for debugging. `Last-Modified` is a CORS-safelisted response header and does not require explicit exposure.
 
 ---
 
@@ -394,8 +397,10 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 - THE SYSTEM SHALL NOT use long-lived service account keys (JSON key files) for the content CI/CD pipeline. Workload Identity Federation provides short-lived OIDC tokens.
 - THE SYSTEM SHALL restrict the Workload Identity Provider to the specific content repository using an attribute condition on the `repository` claim.
-- THE SYSTEM SHALL NOT grant the WIF-mapped service account any roles beyond `roles/cloudfunctions.invoker` and `roles/run.invoker` on the embedding sync function. The content pipeline pushes to Firestore Enterprise using its own credentials (separate from this project's IAM).
+- THE SYSTEM SHALL NOT grant the WIF-mapped service account any roles beyond `roles/cloudfunctions.invoker` and `roles/run.invoker` on the embedding sync function.
 - The WIF-mapped service account SHALL NOT have access to Firestore Enterprise, Firestore Native, BigQuery, Vertex AI, or any other Google Cloud service.
+
+> **Note on Firestore Enterprise write access**: The content CI/CD pipeline pushes article content to Firestore Enterprise collections (`technical_articles`, `blog_articles`, `others`, `categories`) using its own credentials provisioned in the content repository project (out of scope for this spec). The credential mechanism (GCP IAM service account or MongoDB wire protocol username/password) is determined by the content pipeline's own infrastructure. The `content-cicd@` SA (#6 in SEC-013) is used only for invoking the embedding sync function after content is pushed — it does not have Firestore Enterprise write access.
 - Reference: [Workload Identity Federation for GitHub Actions](https://cloud.google.com/iam/docs/workload-identity-federation), [google-github-actions/auth](https://github.com/google-github-actions/auth)
 
 ---
@@ -492,7 +497,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | 3 | `cf-rate-limit-proc@<project-id>.iam.gserviceaccount.com` | Rate Limit Log Processor SA | Identity for the `process-rate-limit-logs` Cloud Function (INFRA-008c) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008c function | Terraform |
 | 4 | `cf-offender-cleanup@<project-id>.iam.gserviceaccount.com` | Offender Cleanup SA | Identity for the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008d function | Terraform |
 | 5 | `cf-embed-sync@<project-id>.iam.gserviceaccount.com` | Embedding Sync SA | Identity for the `sync-article-embeddings` Cloud Function (INFRA-014) | Firestore Enterprise read (articles), `roles/datastore.user` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI) | INFRA-014 function | Terraform |
-| 6 | `content-cicd@<project-id>.iam.gserviceaccount.com` | Content CI/CD SA | WIF-mapped SA for content repository GitHub Actions (SEC-010) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on `sync-article-embeddings` | INFRA-014 function | Terraform |
+| 6 | `content-cicd@<project-id>.iam.gserviceaccount.com` | Content CI/CD SA | WIF-mapped SA for content repository GitHub Actions (SEC-010). Used only for invoking the embedding sync function — Firestore Enterprise write access for content publishing uses separate credentials provisioned in the content pipeline project (out of scope). | `roles/cloudfunctions.invoker`, `roles/run.invoker` on `sync-article-embeddings` | INFRA-014 function | Terraform |
 | 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (state bucket), additional infra-management roles (TBD) | Project | **Manual** (bootstrap) |
 | 8 | `looker-studio-reader@<project-id>.iam.gserviceaccount.com` | Looker Studio Reader SA | Read-only BigQuery access for Looker Studio dashboards (SEC-009, INFRA-011) | `roles/bigquery.dataViewer` (dataset), `roles/bigquery.jobUser` (project) | `website_logs` dataset + project | Terraform |
 | 9 | `cloud-scheduler-invoker@<project-id>.iam.gserviceaccount.com` | Cloud Scheduler Invoker SA | OIDC token issuer for Cloud Scheduler jobs (INFRA-008b, 008e, 014b) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on target Cloud Functions | Target functions | Terraform |

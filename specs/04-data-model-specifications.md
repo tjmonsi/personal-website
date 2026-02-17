@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 1.9
+version: 2.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -155,6 +155,11 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 
 > **Note**: Full-text search for `others` is handled by vector similarity search via Firestore Native (see DM-012), not by MongoDB text indexes.
 
+**Constraints**:
+- `slug` must be unique.
+- `slug` must match pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}-\d{4}$`
+  - Example: `external-article-2025-03-10-0800`
+
 ---
 
 #### DM-006: `categories`
@@ -203,6 +208,9 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `current_ban.end`     | datetime | No     | Ban end time (null = indefinite)            |
 | `current_ban.tier`    | string   | Yes    | Ban tier: "30d", "90d", "indefinite"        |
 | `ban_history`     | object[]   | Yes      | Array of past bans                          |
+| `ban_history[].start` | datetime | Yes    | Ban start time                              |
+| `ban_history[].end`   | datetime | No     | Ban end time (null = indefinite)            |
+| `ban_history[].tier`  | string   | Yes    | Ban tier: `"30d"`, `"90d"`, `"indefinite"` |
 
 **Indexes**:
 

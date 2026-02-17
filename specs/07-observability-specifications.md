@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 2.5
+version: 2.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -277,7 +277,7 @@ const speedInfo = connection ? {
 | Backend error log               | Any ERROR severity log from Cloud Run backend (INFRA-003) | Email   | Warning  |
 | Cloud Function error log        | Any ERROR severity log from any Cloud Function (INFRA-008a, 008c, 008d, INFRA-014) | Email | Warning |
 | Frontend error log              | Log entry with `jsonPayload.log_type="frontend_error"` from Cloud Run backend (any severity, matching INFRA-010c sink filter) | Email | Warning |
-| SLI availability breach         | Backend availability SLI drops below 99.9% over 1 hour (see OBS-010) | Email | Critical |
+| SLI availability breach         | SLI availability burn rate exceeds threshold over 1 hour (see OBS-010) | Email | Critical |
 
 > **Note on alert overlap**: Some generic catch-all alerts ("Backend error log", "Cloud Function error log", "Frontend error log") intentionally overlap with specific alerts (e.g., "Sitemap generation failure", "Masked 500 errors"). This is defense-in-depth — the generic alerts act as a safety net in case a specific alert condition misses an error pattern. For a personal website with email-only notifications, receiving 2 emails per event is an acceptable trade-off for comprehensive coverage.
 
@@ -421,7 +421,7 @@ Terraform operations (`terraform plan`, `terraform apply`) are observable throug
 
 | Alert                          | Condition                                      | Notification | Severity |
 | ------------------------------ | ---------------------------------------------- | ------------ | -------- |
-| SLI availability breach        | Availability drops below 99.9% over 1 hour     | Email (`<alert-email>`) | Critical |
+| SLI availability breach        | Burn rate exceeds threshold over 1 hour (error budget exhaustion) | Email (`<alert-email>`) | Critical |
 
 **Implementation**:
 

@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 2.9
+version: 3.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -180,8 +180,9 @@ ENTRYPOINT ["/server"]
 
 **Adaptive Protection**:
 
-- Cloud Armor Adaptive Protection SHALL be enabled to provide automatic, ML-based escalating DDoS mitigation.
-- Adaptive Protection complements the manual rate-limiting rules by automatically detecting and mitigating L7 DDoS attacks without manual rule updates.
+- Cloud Armor Adaptive Protection SHALL be enabled to provide ML-based DDoS detection with recommended rules that the owner can review and apply.
+- Adaptive Protection complements the manual rate-limiting rules by detecting anomalous L7 traffic patterns and generating suggested protective rules. The owner reviews alerts and applies recommended rules as needed.
+- This uses **Cloud Armor Standard** tier. Automatic rule deployment (without owner review) requires Cloud Armor Enterprise tier, which is not cost-justified for a personal website.
 - Reference: [Cloud Armor Adaptive Protection](https://cloud.google.com/armor/docs/adaptive-protection-overview)
 
 **Custom Error Response for 429**:
@@ -374,8 +375,8 @@ ENTRYPOINT ["/server"]
 4. Increment `offense_count` and append to `offense_history`.
 5. Evaluate progressive banning thresholds (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)):
    - 5 offenses within 7 days → set 30-day ban.
-   - 2 offenses after 30-day ban expires → set 90-day ban.
-   - 2 offenses after 90-day ban expires → set indefinite ban.
+   - 2 offenses within 7 days after 30-day ban expires → set 90-day ban.
+   - 2 offenses within 7 days after 90-day ban expires → set indefinite ban.
 6. Write updated record to Firestore.
 
 **Notes**:

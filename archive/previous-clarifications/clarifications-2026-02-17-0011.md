@@ -53,7 +53,7 @@ The DM-009 cleanup logic (remove records with no active ban and no offenses in 9
 **Option B**: Explicitly state that Tier 2 and 3 have no time window — any 2 offenses before the record is cleaned up (90 days) trigger the next tier. Document this as intentional.
 
 **Answer**:
-
+Use A.
 ---
 
 ## CLR-090: DM-009 `ban_history` Sub-Field Schema Not Defined 🟢
@@ -75,7 +75,7 @@ The DM-009 cleanup logic (remove records with no active ban and no offenses in 9
 **Option B**: Mark `ban_history` as "same schema as `current_ban`" with a cross-reference rather than duplicating the sub-field table.
 
 **Answer**:
-
+Use A.
 ---
 
 ## CLR-091: DM-005 `others` Collection Missing Slug Pattern Constraint 🟢
@@ -97,7 +97,7 @@ slug must match pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}-\d{4}$
 **Option B**: If `others` slugs intentionally allow a different format (e.g., no datetime suffix for external links), explicitly document the allowed pattern and update the BE-API-007 response example to reflect it.
 
 **Answer**:
-
+Use A.
 ---
 
 ## CLR-092: OBS-005 vs OBS-010 SLI Availability Breach Alert Mechanism Inconsistency 🟡
@@ -119,7 +119,7 @@ A threshold check ("availability < 99.9% in 1 hour") and a burn-rate check ("err
 **Option B (Simple Threshold)**: Update OBS-010 to describe a simple threshold: "An alert policy fires when availability drops below 99.9% measured over a 1-hour window." Simpler to understand but less nuanced.
 
 **Answer**:
-
+Use A.
 ---
 
 ## CLR-093: Cloud Armor Adaptive Protection Language vs Standard Tier Capabilities 🟡
@@ -138,7 +138,7 @@ The cost estimate uses Standard tier pricing ($12.01/month for policy + 7 rules)
 **Option B (Use Enterprise tier, update cost estimate)**: Keep the automatic enforcement language and add Cloud Armor Enterprise subscription ($200/month) to the cost estimate.
 
 **Answer**:
-
+Use A.
 ---
 
 ## CLR-094: Content CI/CD Pipeline Firestore Enterprise Write Credentials Not Documented in SA Inventory 🟢
@@ -160,7 +160,7 @@ However:
 **Option B**: Extend the existing `content-cicd@` SA (#6) to include Firestore Enterprise write access and use it for both Firestore writes and Cloud Function invocation.
 
 **Answer**:
-
+Use A.
 ---
 
 ## CLR-095: SEC-002 Ban Check Behavior for OPTIONS Preflight Requests Not Specified 🟢
@@ -176,7 +176,7 @@ If a client is banned, blocking their `OPTIONS` requests would cause CORS prefli
 **Option B**: Apply ban checks to `OPTIONS` requests too, and document that banned clients will see CORS errors. Update frontend error handling (FE-COMP-003) to include a note about CORS error behavior for banned clients.
 
 **Answer**:
-
+Use A.
 ---
 
 ## Summary
