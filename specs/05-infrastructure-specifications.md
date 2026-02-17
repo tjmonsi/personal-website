@@ -1,10 +1,10 @@
 ---
 title: Infrastructure Specifications
-version: 1.9
+version: 2.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai]
+tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, gemini-api]
 ---
 
 ## Infrastructure Specifications
@@ -396,38 +396,42 @@ gcloud firestore indexes composite create \
 
 ---
 
-#### INFRA-013: Vertex AI — Gemini Embedding API
+#### INFRA-013: Gemini API — Embedding
 
-**Purpose**: Generate text embeddings using the Gemini `text-embedding-004` model for semantic search.
+**Purpose**: Generate text embeddings using the `gemini-embedding-001` model for semantic search.
 
 **Configuration**:
 
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
-| API                  | Vertex AI Embeddings API                           |
-| Model                | `text-embedding-004`                               |
-| Region               | `asia-southeast1`                                  |
-| Output dimensions    | 768                                                |
-| Task types used      | `RETRIEVAL_QUERY` (search queries), `RETRIEVAL_DOCUMENT` (article indexing) |
+| API                  | Gemini API (`embedContent`)                        |
+| Model                | `gemini-embedding-001`                             |
+| Output dimensions    | 768 (via `output_dimensionality` parameter; default is 3072) |
+| Task type            | `RETRIEVAL_DOCUMENT` (used for both document indexing and search queries) |
+| Normalization        | L2-normalize all 768-dimensional vectors before storage (required for non-3072 dimensions) |
+| Authentication       | API key stored in Secret Manager                   |
 
 **API Endpoint**:
 ```
-POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/locations/asia-southeast1/publishers/google/models/text-embedding-004:predict
+POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={API_KEY}
 ```
 
 **Usage**:
 
 | Caller                                | Task Type            | Purpose                                    |
 | ------------------------------------- | -------------------- | ------------------------------------------ |
-| Cloud Run (Go API)                    | `RETRIEVAL_QUERY`    | Embed search queries on cache miss         |
+| Cloud Run (Go API)                    | `RETRIEVAL_DOCUMENT` | Embed search queries on cache miss         |
 | `sync-article-embeddings` (INFRA-014) | `RETRIEVAL_DOCUMENT` | Embed article content during sync          |
 
 **Cost Considerations**:
-- Pricing: per 1,000 characters of input text. See: https://cloud.google.com/vertex-ai/generative-ai/pricing
+- Pricing: free tier available; paid tier per 1,000 characters. See: https://ai.google.dev/gemini-api/docs/pricing
 - The embedding cache (DM-011) eliminates redundant API calls for repeated search queries.
 - Article embeddings are generated once per content change (not per request).
 
-**Reference**: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings
+**Normalization Note**:
+- The `gemini-embedding-001` model produces normalized embeddings at 3072 dimensions only. When using `output_dimensionality=768`, the truncated embedding MUST be L2-normalized (divide each component by the L2 norm of the vector) before storage and comparison.
+
+**Reference**: https://ai.google.dev/gemini-api/docs/embeddings
 
 ---
 
@@ -456,7 +460,7 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 3. Compute SHA-256 hash of the source text.
 4. Compare the hash with the `embedding_text_hash` field in the corresponding Firestore Native document.
    - **If unchanged**: Skip (no re-embedding needed).
-   - **If changed or new**: Call Gemini `text-embedding-004` API with `task_type=RETRIEVAL_DOCUMENT` to generate a 768-dimensional embedding vector.
+   - **If changed or new**: Call Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_DOCUMENT` and `output_dimensionality=768` to generate a 768-dimensional embedding vector. L2-normalize the vector before writing to Firestore Native.
 5. Write/update the vector document in the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors`).
 6. Delete vector documents from Firestore Native that no longer have corresponding articles in Firestore Enterprise (orphan cleanup).
 
@@ -691,8 +695,8 @@ Content CI/CD ─────────▶│  │Cloud Function │          
                         Cloud Run + Embed Sync
                         query/write vectors
                         ┌────────────────────────────────┐
-                        │   Vertex AI (Gemini)           │
-                        │   text-embedding-004           │
+                        │   Gemini API                   │
+                        │   gemini-embedding-001          │
                         └────────────────────────────────┘
                                    ▲
                         Cloud Run + Embed Sync
