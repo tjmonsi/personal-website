@@ -1,26 +1,39 @@
+---
+title: Backend API Specifications
+version: 1.1
+date_created: 2026-02-17
+last_updated: 2026-02-17
+owner: TJ Monserrat
+tags: [backend, api, go, cloud-run]
+---
+
 ## Backend API Specifications
 
 ### Technology
 
 - **Language**: Go
-- **Runtime**: Google Cloud Run
+- **Runtime**: Google Cloud Run (asia-southeast1)
 - **Network**: Behind Google Cloud Load Balancer + Cloud Armor
+- **Database**: Firestore Enterprise (MongoDB compatibility mode) via MongoDB Go driver
+- **Domain**: `api.tjmonserrat.com`
 
 ### Global API Rules
 
 #### Allowed HTTP Methods
 
-- THE SYSTEM SHALL only accept `GET` requests on all endpoints.
-- WHEN a request uses any method other than `GET`, THE SYSTEM SHALL return HTTP `405 Method Not Allowed` with an `Allow: GET` header.
+- THE SYSTEM SHALL accept `GET` requests on all endpoints except `POST /t`.
+- THE SYSTEM SHALL accept `POST` requests only on the `/t` endpoint (tracking and error reporting).
+- WHEN a request uses any method other than the allowed method for an endpoint, THE SYSTEM SHALL return HTTP `405 Method Not Allowed` with an appropriate `Allow` header.
 
 #### Error Response Strategy
 
 - THE SYSTEM SHALL only return the following HTTP status codes to clients:
   - `200` — Success
   - `400` — Bad Request (invalid input)
-  - `404` — Not Found (resource does not exist, or catch-all for masked errors)
+  - `403` — Forbidden (blocked client, 30-day ban tier)
+  - `404` — Not Found (resource does not exist, catch-all for masked errors, or indefinitely blocked client)
   - `405` — Method Not Allowed
-  - `429` — Too Many Requests (rate limit exceeded)
+  - `429` — Too Many Requests (rate limit exceeded or initial offense ban tier)
   - `503` — Service Unavailable (only for legitimate network/infrastructure failures)
 - **THE SYSTEM SHALL NEVER return HTTP `500` to clients.**
   - IF an internal server error occurs, THE SYSTEM SHALL return `404` to the client.
@@ -78,8 +91,8 @@
 | `q`          | string  | No       | Search query (max 300 characters)              |
 | `category`   | string  | No       | Filter by category                             |
 | `tags`       | string  | No       | Comma-separated list of tags to filter by      |
-| `date_from`  | string  | No       | Start of date range (ISO 8601 date, e.g. `2025-01-01`) |
-| `date_to`    | string  | No       | End of date range (ISO 8601 date)              |
+| `date_from`  | string  | No       | Start of date range for `date_updated` (ISO 8601 date, e.g. `2025-01-01`) |
+| `date_to`    | string  | No       | End of date range for `date_updated` (ISO 8601 date)              |
 
 **Validation**:
 
@@ -94,13 +107,12 @@
   "items": [
     {
       "title": "Article Title",
-      "slug": "article-title-2025-01-15T10-30-00",
+      "slug": "article-title-2025-01-15-1030",
       "category": "DevOps",
       "abstract": "Brief summary of the article...",
       "tags": ["go", "cloud-run", "docker"],
       "date_created": "2025-01-15T10:30:00Z",
-      "date_updated": "2025-06-20T14:00:00Z",
-      "citation": "Monserrat, TJ. \"Article Title.\" tjmonserrat.com, 15 Jan 2025."
+      "date_updated": "2025-06-20T14:00:00Z"
     }
   ],
   "pagination": {
@@ -133,8 +145,8 @@
 
 - IF the URL does not end with `.md`, THE SYSTEM SHALL return `404`.
 - IF the slug does not match the prescribed pattern, THE SYSTEM SHALL return `404`.
-  - Slug pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.md$`
-  - *See Clarification CLR-005 for exact pattern confirmation.*
+  - Slug pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}-\d{4}\.md$`
+  - Example: `my-first-article-2025-01-15-1030.md`
 - IF the article does not exist in the database, THE SYSTEM SHALL return `404`.
 
 **Response** (`200`):
@@ -158,14 +170,22 @@
     }
   ],
   "content": "<markdown string of article body>",
-  "pagination": {
-    "current_page": 1,
-    "total_pages": 3
+  "citations": {
+    "apa": "Monserrat, T.J. (2025). Article Title. tjmonserrat.com. https://tjmonserrat.com/technical/article-title-2025-01-15-1030",
+    "mla": "Monserrat, TJ. \"Article Title.\" tjmonserrat.com, 15 Jan. 2025, https://tjmonserrat.com/technical/article-title-2025-01-15-1030.",
+    "chicago": "Monserrat, TJ. \"Article Title.\" tjmonserrat.com. January 15, 2025. https://tjmonserrat.com/technical/article-title-2025-01-15-1030.",
+    "bibtex": "@online{monserrat2025articletitle, author={Monserrat, TJ}, title={Article Title}, year={2025}, url={https://tjmonserrat.com/technical/article-title-2025-01-15-1030}}",
+    "ieee": "T.J. Monserrat, \"Article Title,\" tjmonserrat.com, Jan. 15, 2025. [Online]. Available: https://tjmonserrat.com/technical/article-title-2025-01-15-1030"
   }
 }
 ```
 
-> **Note**: See Clarification CLR-003 regarding article pagination (multi-page articles).
+**Behavior**:
+
+- THE SYSTEM SHALL generate citation strings dynamically from article metadata (title, author, date, slug).
+- Citations SHALL be generated in all supported formats: APA, MLA, Chicago, BibTeX, and IEEE.
+- Citation URLs SHALL use the frontend route format (`https://tjmonserrat.com/technical/{slug}`) without the `.md` extension. The `.md` extension is only used in API paths (`GET /technical/{slug}.md`), not in reader-facing URLs.
+- The frontend route `/technical/:slug` receives the slug without `.md`. When calling the API, the frontend appends `.md` to form the API path (`GET /technical/{slug}.md`).
 
 ---
 
@@ -203,16 +223,26 @@ All path parameters, validation rules, response format, and error handling are t
     {
       "platform": "GitHub",
       "url": "https://github.com/tjmonserrat",
-      "display_name": "@tjmonserrat"
+      "display_name": "@tjmonserrat",
+      "icon": "github",
+      "sort_order": 1
     },
     {
       "platform": "LinkedIn",
       "url": "https://linkedin.com/in/tjmonserrat",
-      "display_name": "TJ Monserrat"
+      "display_name": "TJ Monserrat",
+      "icon": "linkedin",
+      "sort_order": 2
     }
   ]
 }
 ```
+
+**Behavior**:
+
+- THE SYSTEM SHALL return social links filtered to only include entries where `is_active` is `true` in the database.
+- THE SYSTEM SHALL return items sorted by `sort_order` in ascending order.
+- IF no active social links exist, THE SYSTEM SHALL return an empty `items` array (HTTP 200).
 
 ---
 
@@ -220,7 +250,7 @@ All path parameters, validation rules, response format, and error handling are t
 
 **Description**: Returns a paginated list of external/notable content.
 
-**Behavior**: Identical to BE-API-002 in terms of query parameters, pagination, validation, and error handling, but queries the "others" table.
+**Behavior**: Identical to BE-API-002 in terms of query parameters, pagination, validation, and error handling, but queries the "others" collection. Date range filter applies to `date_updated`.
 
 **Response item differences**:
 
@@ -229,7 +259,7 @@ All path parameters, validation rules, response format, and error handling are t
   "items": [
     {
       "title": "External Article Title",
-      "slug": "external-article-2025-03-10T08-00-00",
+      "slug": "external-article-2025-03-10-0800",
       "category": "Open Source",
       "abstract": "Description of the external content...",
       "tags": ["python", "colab"],
@@ -251,38 +281,140 @@ All path parameters, validation rules, response format, and error handling are t
 
 ---
 
-#### BE-API-008: Tracking Endpoint
+#### BE-API-008: `GET /categories`
 
-**Description**: Receives anonymous visitor tracking data.
+**Description**: Returns the list of all categories across all article types.
 
-> **Note**: See Clarification CLR-002. The initial plan specifies GET-only, but tracking requires sending data. Endpoint design depends on resolution of CLR-002.
+**Request**: No parameters.
 
-**Proposed**: `GET /track` with query parameters (if GET-only is enforced):
+**Response** (`200`):
 
-| Parameter  | Type   | Description                     |
-| ---------- | ------ | ------------------------------- |
-| `page`     | string | Current page URL                |
-| `ref`      | string | Referrer URL (optional)         |
-| `action`   | string | User action identifier          |
+```json
+{
+  "categories": [
+    {
+      "name": "DevOps",
+      "date_created": "2025-01-10T08:00:00Z"
+    },
+    {
+      "name": "Cloud",
+      "date_created": "2025-02-15T12:00:00Z"
+    }
+  ]
+}
+```
 
-- IP address and User-Agent are extracted from request headers server-side.
+**Behavior**:
+
+- THE SYSTEM SHALL return all categories from the `categories` collection, sorted alphabetically by name.
+- Categories are free-form and derived from the categories assigned to articles across all article types.
+- IF no categories exist, THE SYSTEM SHALL return an empty array.
+- The frontend SHALL cache the response in sessionStorage for 24 hours.
 
 ---
 
-#### BE-API-009: Error Reporting Endpoint
+#### BE-API-009: `POST /t`
 
-**Description**: Receives frontend error/performance data.
+**Description**: Receives anonymous visitor tracking data and frontend error reports. This is the **only POST endpoint** in the entire API.
 
-> **Note**: See Clarification CLR-002. Same constraint as tracking.
+**Authentication**:
 
-**Proposed**: `GET /report-error` with query parameters (if GET-only is enforced):
+- THE SYSTEM SHALL require a valid `Authorization: Bearer <JWT>` header.
+- The JWT SHALL be generated by the frontend using a static client ID and static secret embedded (obfuscated) in the frontend code.
+- THE SYSTEM SHALL validate the JWT signature, expiration, and issuer claims.
+- IF the JWT is missing, invalid, or expired, THE SYSTEM SHALL return HTTP `403 Forbidden`.
+- The JWT SHALL include the following claims:
+  - `iss`: Static client identifier (e.g., `"tjmonserrat-web"`)
+  - `iat`: Issued-at timestamp
+  - `exp`: Expiration timestamp (short-lived, e.g., 5 minutes)
+- The JWT secret SHALL be stored as an environment variable on the backend. The same secret is embedded (obfuscated) in the frontend bundle.
 
-| Parameter   | Type   | Description                        |
-| ----------- | ------ | ---------------------------------- |
-| `type`      | string | Error type (network, timeout, etc.)|
-| `message`   | string | Error message (truncated)          |
-| `page`      | string | Page URL where error occurred      |
-| `speed`     | string | Connection speed (if detected)     |
+**Request Body** (JSON, `Content-Type: application/json`):
+
+For page tracking:
+```json
+{
+  "action": "page_view",
+  "page": "/technical",
+  "referrer": "https://google.com",
+  "browser": "Chrome 120",
+  "connection_speed": {
+    "effective_type": "4g",
+    "downlink": 10.0,
+    "rtt": 50
+  }
+}
+```
+
+For error reporting:
+```json
+{
+  "action": "error_report",
+  "page": "/technical/my-article-2025-01-15-1030.md",
+  "browser": "Chrome 120",
+  "error_type": "network",
+  "error_message": "Failed to fetch article content",
+  "connection_speed": {
+    "effective_type": "3g",
+    "downlink": 1.5,
+    "rtt": 300
+  }
+}
+```
+
+**Validation**:
+
+- `action` is required and must be one of: `page_view`, `error_report`.
+- `page` is required (string, max 500 characters).
+- `browser` is required (string, max 200 characters).
+- All other fields are optional.
+- IF validation fails, THE SYSTEM SHALL return HTTP `400`.
+
+**Response** (`200`):
+
+```json
+{
+  "status": "ok"
+}
+```
+
+**Behavior**:
+
+- THE SYSTEM SHALL extract the client IP from `X-Forwarded-For` or the connection source.
+- THE SYSTEM SHALL add a server-side UTC timestamp.
+- IF `action` is `"page_view"`, THE SYSTEM SHALL write to the `tracking` collection (DM-007).
+- IF `action` is `"error_report"`, THE SYSTEM SHALL write to the `error_reports` collection (DM-008).
+- THE SYSTEM SHALL apply separate rate limits to this endpoint (30 req/min per IP).
+
+---
+
+#### BE-API-010: `GET /health`
+
+**Description**: Health check endpoint used by Cloud Run for liveness/readiness probes.
+
+**Request**: No parameters.
+
+**Response** (`200`):
+
+```json
+{
+  "status": "ok"
+}
+```
+
+**Behavior**:
+
+- THE SYSTEM SHALL check database connectivity and return `200` with `{"status": "ok"}` if healthy.
+- IF the database is unreachable, THE SYSTEM SHALL return `503 Service Unavailable`.
+- This endpoint SHALL NOT be subject to application-level rate limiting.
+- This endpoint SHALL be accessible only through Cloud Run's internal health check mechanism (not exposed to public traffic via the Load Balancer).
+
+---
+
+### General API Notes
+
+- **Author field**: The `author` field in article responses (BE-API-003, BE-API-005) is always hardcoded to `"TJ Monserrat"`. This is a single-author website; the author value is not stored in the database.
+- **Offline availability**: The backend does not track which articles are available offline. Offline availability is a client-side concern managed by the frontend's service worker and local storage.
 
 ---
 

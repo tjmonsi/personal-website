@@ -1,3 +1,12 @@
+---
+title: Security Specifications
+version: 1.1
+date_created: 2026-02-17
+last_updated: 2026-02-17
+owner: TJ Monserrat
+tags: [security, rate-limiting, cors, authentication]
+---
+
 ## Security Specifications
 
 ### Threat Model Summary
@@ -11,6 +20,7 @@
 | Information disclosure        | Never return 500, sanitize error responses            | Application    |
 | Brute-force API abuse         | Progressive rate limiting and banning                 | Application    |
 | Bot abuse                     | robots.txt, rate limiting, Cloud Armor bot management | Both           |
+| Unauthorized tracking abuse   | JWT bearer token authentication on POST /t            | Application    |
 
 ---
 
@@ -26,13 +36,14 @@
 
 - THE SYSTEM SHALL validate article slugs against the prescribed regex pattern.
 - THE SYSTEM SHALL reject any slug not matching the pattern with HTTP `404`.
-- Regex pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.md$`
+- Regex pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}-\d{4}\.md$`
+  - Example: `my-first-article-2025-01-15-1030.md`
 
 **Query Parameter Validation**:
 
 - THE SYSTEM SHALL validate `page` as a positive integer.
 - THE SYSTEM SHALL validate `date_from` and `date_to` as valid ISO 8601 dates.
-- THE SYSTEM SHALL validate `category` against known categories (if categories are predefined — see CLR-006).
+- THE SYSTEM SHALL validate `category` as a non-empty string.
 - THE SYSTEM SHALL validate `tags` as a comma-separated list of alphanumeric strings with hyphens.
 - THE SYSTEM SHALL reject requests with unknown or malformed query parameters with HTTP `400`.
 
@@ -46,10 +57,16 @@
 
 | Scope           | Limit                         | Window     |
 | --------------- | ----------------------------- | ---------- |
-| Global (all endpoints) | *TBD — See CLR-007*    | Per minute |
-| Per endpoint    | *TBD*                         | Per minute |
+| Regular user (all GET endpoints) | 60 req/min    | Per minute |
+| Known bots      | 10 req/min                    | Per minute |
+| Tracking/error (`POST /t`) | 30 req/min           | Per minute |
 
-> **Consideration**: The plan notes that a single IP may represent multiple users (shared ISP NAT). Rate limits should be generous enough to accommodate this. See CLR-007.
+**Rationale**:
+- **60 req/min for regular users**: Generous enough to accommodate shared NAT/ISP IPs where multiple users share a single public IP. Based on common web application rate limiting practices. Reference: [OWASP Rate Limiting Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html)
+- **10 req/min for known bots**: Aligns with standard crawl rates recommended for polite bots. Google recommends no more than one request every few seconds. Reference: [Google Search Central - Crawl Rate](https://developers.google.com/search/docs/crawling-indexing/reduce-crawl-rate)
+- **30 req/min for tracking/error**: Separate bucket prevents tracking calls from consuming user quota. Based on typical single-page application page view rates. Reference: [Cloudflare Rate Limiting Best Practices](https://developers.cloudflare.com/waf/rate-limiting-rules/best-practices/)
+
+> **Note**: A single IP may represent multiple users (shared ISP NAT). These limits are set to be generous enough to accommodate this while still providing protection.
 
 **Rate Limit Headers** (on every response):
 
@@ -75,21 +92,31 @@ Retry-After: 30  (only on 429 responses)
 
 WHEN a client exceeds the rate limit, THE SYSTEM SHALL track it as an "offense."
 
-| Condition                                         | Action                      |
-| ------------------------------------------------- | --------------------------- |
-| Rate limit exceeded                               | Return `429` with `Retry-After` |
-| 5 offenses within 7 days                          | Block for 30 days           |
-| 2 offenses after 30-day ban expires               | Block for 90 days           |
-| 2 offenses after 90-day ban expires               | Block indefinitely          |
+| Condition                                         | Action                      | Response Code |
+| ------------------------------------------------- | --------------------------- | ------------- |
+| Rate limit exceeded (offenses 1–5)                 | Return rate limit response  | `429`         |
+| 5 offenses within 7 days                          | Block for 30 days           | `403`         |
+| 2 offenses after 30-day ban expires               | Block for 90 days           | `404`         |
+| 2 offenses after 90-day ban expires               | Block indefinitely          | `404`         |
 
 **Blocking behavior**:
 
-- WHEN a blocked client makes a request, THE SYSTEM SHALL return HTTP `403 Forbidden`.
-  - *Or* HTTP `429` — see CLR-008 for preferred status code for banned clients.
-- THE SYSTEM SHALL include when the ban expires (if not indefinite) in the response.
-- Bans are tracked in the `rate_limit_offenders` database collection (see DM-008).
+- WHEN a client with 1–5 offenses exceeds the rate limit, THE SYSTEM SHALL return HTTP `429 Too Many Requests`.
+- WHEN a client blocked for 30 days makes a request, THE SYSTEM SHALL return HTTP `403 Forbidden`.
+- WHEN a client blocked for 90 days or indefinitely makes a request, THE SYSTEM SHALL return HTTP `404 Not Found` (maximum opacity — attacker does not know they are banned).
+- THE SYSTEM SHALL include when the ban expires (if applicable) in `403` responses only.
+- Bans are tracked in the `rate_limit_offenders` database collection (see DM-009).
 
-**Ban response**:
+**Ban response for 429** (rate limit exceeded):
+
+```json
+{
+  "error": "Too many requests. Please try again later.",
+  "retry_after": 30
+}
+```
+
+**Ban response for 403** (30-day block):
 
 ```json
 {
@@ -97,6 +124,10 @@ WHEN a client exceeds the rate limit, THE SYSTEM SHALL track it as an "offense."
   "blocked_until": "2026-03-19T00:00:00Z"
 }
 ```
+
+**Ban response for 404** (90-day / indefinite block):
+
+Standard 404 response — indistinguishable from a normal "not found" to the client.
 
 ---
 
@@ -110,8 +141,51 @@ WHEN a client exceeds the rate limit, THE SYSTEM SHALL track it as an "offense."
 
 ### SEC-003: HTTP Method Enforcement
 
-- THE SYSTEM SHALL only accept `GET` requests.
-- WHEN any other HTTP method is used, THE SYSTEM SHALL return HTTP `405` with header `Allow: GET`.
+- THE SYSTEM SHALL accept `GET` requests on all endpoints except `POST /t`.
+- THE SYSTEM SHALL accept `POST` requests only on the `/t` endpoint.
+- WHEN any other HTTP method is used on any endpoint, THE SYSTEM SHALL return HTTP `405` with an appropriate `Allow` header.
+
+---
+
+### SEC-003A: POST /t Authentication
+
+**Purpose**: Protect the `POST /t` endpoint so that only the legitimate frontend can submit tracking and error data.
+
+**Mechanism**: JWT Bearer Token with static frontend credentials.
+
+**Implementation**:
+
+- A static **client ID** (e.g., `"tjmonserrat-web"`) and a static **secret key** are embedded in the frontend code.
+- The frontend SHALL obfuscate these credentials in the JavaScript bundle to make extraction non-trivial. Obfuscation methods include:
+  - Splitting the secret across multiple variables
+  - Using string transformation functions
+  - Embedding within compiled/minified code
+- The frontend generates a short-lived JWT (5-minute expiry) signed with the static secret using HMAC-SHA256.
+- The JWT is sent as `Authorization: Bearer <token>` on each `POST /t` request.
+
+**JWT Claims**:
+
+```json
+{
+  "iss": "tjmonserrat-web",
+  "iat": 1708000000,
+  "exp": 1708000300
+}
+```
+
+**Backend Validation**:
+
+- THE SYSTEM SHALL verify the JWT signature using the shared secret (stored as an environment variable).
+- THE SYSTEM SHALL verify `iss` matches the expected client ID.
+- THE SYSTEM SHALL verify `exp` has not passed (token not expired).
+- THE SYSTEM SHALL verify `iat` is not in the future.
+- IF any validation fails, THE SYSTEM SHALL return HTTP `403 Forbidden`.
+
+**Security Considerations**:
+
+- This is a "security through obscurity" layer — it raises the bar for abuse but is not impenetrable. A determined attacker could extract the secret from the frontend bundle.
+- Combined with rate limiting on `POST /t` (30 req/min), this provides adequate protection for a personal website.
+- The secret SHALL be rotatable via environment variable changes on both frontend build and backend deployment.
 
 ---
 
@@ -137,7 +211,7 @@ The backend SHALL include the following headers on all responses:
 
 | Header                         | Value                                                     |
 | ------------------------------ | --------------------------------------------------------- |
-| `Content-Security-Policy`      | `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'` |
+| `Content-Security-Policy`      | `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonserrat.com` |
 | `X-Content-Type-Options`       | `nosniff`                                                 |
 | `X-Frame-Options`              | `DENY`                                                    |
 | `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`                     |
@@ -148,17 +222,17 @@ The backend SHALL include the following headers on all responses:
 
 ### SEC-006: CORS
 
-- IF the frontend and backend are on different origins (e.g., subdomain routing), THE SYSTEM SHALL configure CORS headers.
+- THE SYSTEM SHALL configure CORS headers since the frontend (`tjmonserrat.com`) and backend (`api.tjmonserrat.com`) are on different origins.
 - Allowed origin: `https://tjmonserrat.com` (and staging equivalents)
-- Allowed methods: `GET`
-- Allowed headers: `Content-Type, Accept`
+- Allowed methods: `GET, POST`
+- Allowed headers: `Content-Type, Accept, Authorization`
 - Max age: `86400` (1 day)
 
 ---
 
 ### SEC-007: Data Privacy
 
-- Tracking data (DM-006) SHALL be anonymized to the extent possible.
+- Tracking data (DM-007) SHALL be anonymized to the extent possible.
 - IP addresses SHALL be stored but MAY be hashed or truncated for privacy compliance.
 - THE SYSTEM SHALL comply with applicable data protection regulations (GDPR if EU visitors are expected).
 - THE SYSTEM SHALL include a privacy notice or link on the website.

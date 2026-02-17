@@ -1,3 +1,12 @@
+---
+title: Observability Specifications
+version: 1.1
+date_created: 2026-02-17
+last_updated: 2026-02-17
+owner: TJ Monserrat
+tags: [observability, logging, monitoring, tracking]
+---
+
 ## Observability Specifications
 
 ### Overview
@@ -59,15 +68,18 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 **Purpose**: Understand site usage patterns without identifying individual users.
 
+**Endpoint**: `POST /t` (authenticated via JWT Bearer Token — see SEC-003A in [06-security-specifications.md](06-security-specifications.md))
+
 **Data Collected**:
 
 | Data Point          | Source                          | Storage              |
 | ------------------- | ------------------------------- | -------------------- |
-| Page visited        | Frontend sends to tracking API  | `tracking` collection|
-| Referrer URL        | `Referer` request header        | `tracking` collection|
-| Browser + version   | `User-Agent` request header     | `tracking` collection|
+| Page visited        | Frontend sends via `POST /t`    | `tracking` collection|
+| Referrer URL        | Frontend sends in request body  | `tracking` collection|
+| Browser + version   | Frontend sends in request body  | `tracking` collection|
 | IP address          | Request source IP / `X-Forwarded-For` | `tracking` collection|
 | User action         | Frontend sends action type      | `tracking` collection|
+| Connection speed    | Frontend sends from Navigator.connection API | `tracking` collection|
 | Timestamp           | Server-side UTC timestamp       | `tracking` collection|
 
 **Privacy Measures**:
@@ -82,6 +94,8 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 ### OBS-003: Frontend Error Reporting
 
 **Purpose**: Capture and analyze client-side errors, especially network performance issues.
+
+**Endpoint**: `POST /t` with `action: "error_report"` (same endpoint as tracking — see BE-API-009 in [03-backend-api-specifications.md](03-backend-api-specifications.md))
 
 **Data Collected**:
 
@@ -183,27 +197,40 @@ const speedInfo = connection ? {
 
 ### OBS-007: robots.txt
 
-**Purpose**: Instruct web crawlers on allowed pages and rate limits.
+**Purpose**: Instruct web crawlers on allowed pages and rate limits. Block API-only paths and tracking endpoints from crawlers.
 
-**Proposed Content**:
+**Content**:
 
 ```
 User-agent: *
 Allow: /
+Disallow: /t
 Crawl-delay: 10
 
 User-agent: Googlebot
 Allow: /
+Disallow: /t
 Crawl-delay: 5
 
 User-agent: Bingbot
 Allow: /
+Disallow: /t
 Crawl-delay: 5
 
 Sitemap: https://tjmonserrat.com/sitemap.xml
 ```
 
-> **Note**: See Clarification CLR-009 for specific crawler rules.
+**Notes**:
+- The `robots.txt` is served from the frontend domain (`tjmonserrat.com`).
+- API-only paths (`api.tjmonserrat.com`) are on a separate subdomain. A separate `robots.txt` SHALL be served on `api.tjmonserrat.com`:
+
+```
+User-agent: *
+Disallow: /
+```
+
+- This blocks all crawlers from the API subdomain entirely.
+- The tracking endpoint (`POST /t`) is blocked from the frontend `robots.txt` as well, though crawlers typically only follow GET links.
 
 ---
 

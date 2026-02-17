@@ -1,8 +1,22 @@
+---
+title: Data Model Specifications
+version: 1.1
+date_created: 2026-02-17
+last_updated: 2026-02-17
+owner: TJ Monserrat
+tags: [data-model, database, firestore, mongodb]
+---
+
 ## Data Model Specifications
 
 ### Database
 
-> **IMPORTANT**: See Clarification CLR-001 regarding the database technology choice. The initial plan mentions "Firestore Enterprise Database using MongoDB ORM," which is contradictory. The data models below are expressed in a database-agnostic format.
+- **Technology**: Firestore Enterprise in MongoDB compatibility mode
+- **Region**: `asia-southeast1`
+- **Driver**: MongoDB Go driver (standard MongoDB wire protocol)
+- **Reference**: https://firebase.google.com/docs/firestore/enterprise/mongodb-compatibility-overview
+
+Data models below use MongoDB-style field definitions, compatible with the MongoDB wire protocol exposed by Firestore Enterprise.
 
 ---
 
@@ -31,18 +45,16 @@
 | -------------- | ---------- | -------- | ---------------------------------------------- |
 | `_id`          | string     | Yes      | Document identifier                            |
 | `title`        | string     | Yes      | Article title                                  |
-| `slug`         | string     | Yes      | URL-safe slug (format: `{title-slug}-{datetime}`) |
-| `category`     | string     | Yes      | Article category                               |
+| `slug`         | string     | Yes      | URL-safe slug (format: `{title-slug}-{YYYY}-{MM}-{DD}-{HHMM}`) |
+| `category`     | string     | Yes      | Article category (free-form)                   |
 | `abstract`     | string     | Yes      | Brief summary / excerpt                        |
 | `tags`         | string[]   | Yes      | List of tags                                   |
 | `content`      | string     | Yes      | Full article body in markdown                  |
-| `citation`     | string     | Yes      | Citation text for referencing the article       |
 | `changelog`    | object[]   | Yes      | Array of changelog entries                     |
 | `changelog[].date`        | datetime | Yes | Date of the change                    |
 | `changelog[].description` | string   | Yes | Description of what changed           |
 | `date_created` | datetime   | Yes      | First publication date (UTC)                   |
 | `date_updated` | datetime   | Yes      | Last update date (UTC)                         |
-| `total_pages`  | integer    | No       | Number of pages if article is paginated        |
 
 **Indexes**:
 
@@ -51,14 +63,19 @@
 | `idx_slug`              | `slug`                          | Unique   | Slug lookups                 |
 | `idx_category`          | `category`                      | Standard | Category filtering           |
 | `idx_tags`              | `tags`                          | Multikey | Tag filtering                |
-| `idx_date_created`      | `date_created`                  | Standard | Date range queries, sorting  |
-| `idx_date_updated`      | `date_updated`                  | Standard | Date range queries           |
+| `idx_date_updated`      | `date_updated`                  | Standard | Date range queries, sorting  |
+| `idx_date_created`      | `date_created`                  | Standard | Sorting by creation date     |
 | `idx_text_search`       | `title`, `abstract`, `content`  | Text     | Full-text search             |
 
 **Constraints**:
 - `slug` must be unique.
-- `slug` must match pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$`
-  - *See CLR-005 for confirmation of slug format.*
+- `slug` must match pattern: `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}-\d{4}$`
+  - Example: `my-first-article-2025-01-15-1030`
+
+**Notes**:
+- Citations are generated dynamically by the backend from article metadata (title, author, dates, slug). No citation field is stored.
+- Categories are free-form strings. When an article is created or updated, the CI/CD pipeline ensures the category exists in the `categories` collection.
+- The `author` value (`"TJ Monserrat"`) is not stored in this collection. It is hardcoded in the backend API response since this is a single-author website.
 
 ---
 
@@ -78,16 +95,31 @@
 
 #### DM-004: `socials`
 
-**Description**: Stores social media links.
+**Description**: Stores social media and contact links. Links are managed through the content management repository and pushed to the database.
 
 | Field          | Type     | Required | Description                          |
 | -------------- | -------- | -------- | ------------------------------------ |
 | `_id`          | string   | Yes      | Document identifier                  |
-| `platform`     | string   | Yes      | Platform name (e.g., "GitHub")       |
-| `url`          | string   | Yes      | Full URL to the profile              |
-| `display_name` | string   | Yes      | Display name on the platform         |
-| `icon`         | string   | No       | Icon identifier or URL               |
-| `sort_order`   | integer  | No       | Display order (ascending)            |
+| `platform`     | string   | Yes      | Platform name (e.g., "GitHub", "LinkedIn", "Twitter/X", "YouTube", "Mastodon", "Email") |
+| `url`          | string   | Yes      | Full URL to the profile or contact (e.g., `https://github.com/tjmonserrat` or `mailto:tj@example.com`) |
+| `display_name` | string   | Yes      | Display text shown to users (e.g., "@tjmonserrat") |
+| `icon`         | string   | No       | Icon identifier for the platform (e.g., `github`, `linkedin`, `twitter`, `youtube`, `mastodon`, `email`). Used by the frontend to render the appropriate icon. |
+| `sort_order`   | integer  | Yes      | Display order (ascending). Determines the order in which links appear on the socials page. |
+| `is_active`    | boolean  | Yes      | Whether the link is actively displayed. Allows hiding links without deleting them. Default: `true`. |
+| `date_created` | datetime | Yes      | When the social link was added (UTC)  |
+| `date_updated` | datetime | Yes      | Last update timestamp (UTC)           |
+
+**Indexes**:
+
+| Index Name         | Fields       | Type     | Purpose                |
+| ------------------ | ------------ | -------- | ---------------------- |
+| `idx_sort_order`   | `sort_order` | Standard | Ordered display        |
+| `idx_is_active`    | `is_active`  | Standard | Filter active links    |
+
+**Notes**:
+- The `platform` field is free-form to support any social platform without code changes.
+- The `icon` field maps to a frontend icon set (e.g., Material Design Icons, Font Awesome). The frontend handles rendering.
+- Only entries with `is_active: true` are returned by the `GET /socials` API endpoint.
 
 ---
 
@@ -115,13 +147,37 @@
 | `idx_category`          | `category`                      | Standard | Category filtering           |
 | `idx_tags`              | `tags`                          | Multikey | Tag filtering                |
 | `idx_date_created`      | `date_created`                  | Standard | Date range queries           |
+| `idx_date_updated`      | `date_updated`                  | Standard | Date range queries           |
 | `idx_text_search`       | `title`, `abstract`             | Text     | Full-text search             |
 
 ---
 
-#### DM-006: `tracking`
+#### DM-006: `categories`
 
-**Description**: Stores anonymous page visit tracking data.
+**Description**: Stores the list of all content categories across all article types (technical, blog, others). Categories are free-form and derived from articles. This collection is managed by the content management CI/CD pipeline.
+
+| Field          | Type     | Required | Description                          |
+| -------------- | -------- | -------- | ------------------------------------ |
+| `_id`          | string   | Yes      | Document identifier                  |
+| `name`         | string   | Yes      | Category name (e.g., "DevOps", "Cloud", "AI/ML") |
+| `date_created` | datetime | Yes      | When the category was first created (UTC) |
+
+**Indexes**:
+
+| Index Name         | Fields   | Type   | Purpose                |
+| ------------------ | -------- | ------ | ---------------------- |
+| `idx_name`         | `name`   | Unique | Category name lookups, prevent duplicates |
+
+**Notes**:
+- Categories are populated by the content management CI/CD pipeline when articles are created or updated.
+- The `GET /categories` API endpoint returns all entries from this collection.
+- The frontend caches the categories list in sessionStorage for 24 hours.
+
+---
+
+#### DM-007: `tracking`
+
+**Description**: Stores anonymous page visit tracking data. Data is written by the `POST /t` endpoint.
 
 | Field          | Type     | Required | Description                                    |
 | -------------- | -------- | -------- | ---------------------------------------------- |
@@ -131,6 +187,7 @@
 | `action`       | string   | Yes      | User action (e.g., "page_view")                |
 | `browser`      | string   | Yes      | Browser name and version                       |
 | `ip_address`   | string   | Yes      | Client IP address                              |
+| `connection_speed` | object | No     | Connection speed info (effective_type, downlink, rtt) |
 | `timestamp`    | datetime | Yes      | Visit timestamp (UTC)                          |
 
 **Indexes**:
@@ -144,7 +201,7 @@
 
 ---
 
-#### DM-007: `error_reports`
+#### DM-008: `error_reports`
 
 **Description**: Stores frontend error reports.
 
@@ -156,14 +213,14 @@
 | `page`            | string   | Yes      | Page URL where error occurred           |
 | `browser`         | string   | Yes      | Browser name and version                |
 | `ip_address`      | string   | Yes      | Client IP address                       |
-| `connection_speed`| string   | No       | Detected connection speed               |
+| `connection_speed`| object   | No       | Connection speed info (effective_type, downlink, rtt) |
 | `timestamp`       | datetime | Yes      | Error timestamp (UTC)                   |
 
 **Data Retention**: TTL index to auto-expire after configurable period (e.g., 30 days).
 
 ---
 
-#### DM-008: `rate_limit_offenders`
+#### DM-009: `rate_limit_offenders`
 
 **Description**: Tracks repeat rate limit offenders for progressive blocking.
 
@@ -196,22 +253,29 @@ frontpage (1 document)
     └── standalone
 
 technical_articles (many documents)
-    └── standalone, queried by slug/category/tags/date
+    └── standalone, queried by slug/category/tags/date_updated
+    └── category field → referenced in categories collection
 
 blog_articles (many documents)
     └── standalone, identical structure to technical_articles
+    └── category field → referenced in categories collection
+
+categories (many documents)
+    └── derived from article categories across all article types
+    └── synced by content management CI/CD pipeline
 
 socials (few documents)
-    └── standalone
+    └── standalone, ordered by sort_order, filtered by is_active
 
 others (many documents)
     └── standalone, links to external URLs
+    └── category field → referenced in categories collection
 
 tracking (many documents, append-only)
-    └── standalone, TTL auto-expiry
+    └── standalone, TTL auto-expiry (90 days)
 
 error_reports (many documents, append-only)
-    └── standalone, TTL auto-expiry
+    └── standalone, TTL auto-expiry (30 days)
 
 rate_limit_offenders (many documents)
     └── standalone, referenced during rate limit checks

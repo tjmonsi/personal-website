@@ -1,12 +1,31 @@
+---
+title: Frontend Specifications
+version: 1.1
+date_created: 2026-02-17
+last_updated: 2026-02-17
+owner: TJ Monserrat
+tags: [frontend, nuxt4, vue3, spa]
+---
+
 ## Frontend Specifications
 
 ### Technology
 
-- **Framework**: Nuxt 4 (static/SPA mode, no SSR)
+- **Framework**: Nuxt 4 (SPA mode, no SSR)
 - **UI Framework**: Vue 3 (Composition API)
 - **Build Tool**: Vite
-- **Hosting**: Firebase Hosting + Firebase Functions
+- **Hosting**: Firebase Hosting (static assets) + Firebase Functions (SPA serving)
 - **Rendering Mode**: Client-side only
+- **Deployment Reference**: https://nuxt.com/deploy/firebase
+
+### Definitions
+
+| Term             | Definition |
+| ---------------- | ---------- |
+| SPA              | Single Page Application — all rendering happens client-side |
+| Infinite Scroll  | A pattern where content loads automatically as the user scrolls down, without explicit pagination controls |
+| Smart Download   | Heuristic-based prefetching of article content for offline reading based on user browsing patterns |
+| sessionStorage   | Browser storage that persists for the duration of a page session |
 
 ---
 
@@ -30,7 +49,7 @@
 
 #### FE-PAGE-002: Technical Blog List (`/technical`)
 
-**Description**: Paginated list of technical articles with search and filtering.
+**Description**: Paginated list of technical articles with search and filtering. Desktop uses traditional pagination; mobile uses infinite scroll.
 
 **Requirements**:
 
@@ -38,23 +57,29 @@
 - Each article item SHALL display:
   - Title (clickable, links to the article page)
   - Abstract with a "Read more" button (links to the article page)
-  - Citation text (clickable, links to the article page)
+  - Offline availability indicator (shows whether the article has been saved for offline reading)
 - THE SYSTEM SHALL display a search bar at the top of the page.
 - THE SYSTEM SHALL display filter controls for:
-  - Category (single-select dropdown)
+  - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
   - Tags (multi-select)
-  - Date range for "last updated" (date picker range)
-- THE SYSTEM SHALL paginate results showing the current page number.
-- THE SYSTEM SHALL display navigation buttons:
-  - "Previous" button: hidden on the first page
-  - "Next" button: hidden on the last page
-- THE SYSTEM SHALL show the current page and total pages.
+  - Date range for "last updated" (date picker range, filters on `date_updated`)
+- **Desktop pagination**:
+  - THE SYSTEM SHALL paginate results showing the current page number and total pages.
+  - THE SYSTEM SHALL display navigation buttons:
+    - "Previous" button: hidden on the first page
+    - "Next" button: hidden on the last page
+- **Mobile pagination**:
+  - THE SYSTEM SHALL use infinite scroll (endless scrollable list) instead of traditional pagination.
+  - WHEN the user scrolls to the bottom of the list, THE SYSTEM SHALL automatically fetch the next page of results.
+  - THE SYSTEM SHALL display a loading indicator while fetching additional results.
+  - THE SYSTEM SHALL stop fetching when all results have been loaded.
+- THE SYSTEM SHALL allow the user to tap/click a "Save for offline" action on each article in the list view.
 
 ---
 
 #### FE-PAGE-003: Technical Blog Article (`/technical/:slug`)
 
-**Description**: Full article view with table of contents and metadata.
+**Description**: Full article view with table of contents, metadata, and citation format selector.
 
 **Requirements**:
 
@@ -74,21 +99,28 @@
   - Generated from article headings (H2, H3, H4)
   - Each entry is a clickable anchor link
   - Sticky/fixed position while scrolling
-- THE SYSTEM SHALL support article pagination (multi-page articles):
-  - Show current page number
-  - "Previous" button: hidden on first page
-  - "Next" button: hidden on last page
+- THE SYSTEM SHALL display a citation section with a format selector:
+  - The user SHALL be able to select from multiple citation formats:
+    - **APA**: `Monserrat, T.J. (2025). Article Title. tjmonserrat.com. https://tjmonserrat.com/technical/slug.md`
+    - **MLA**: `Monserrat, TJ. "Article Title." tjmonserrat.com, 15 Jan. 2025, https://tjmonserrat.com/technical/slug.md.`
+    - **Chicago**: `Monserrat, TJ. "Article Title." tjmonserrat.com. January 15, 2025. https://tjmonserrat.com/technical/slug.md.`
+    - **BibTeX**: BibTeX entry for academic use
+    - **IEEE**: `[N] T.J. Monserrat, "Article Title," tjmonserrat.com, Jan. 15, 2025. [Online]. Available: https://tjmonserrat.com/technical/slug.md`
+  - WHEN the user clicks the citation text, THE SYSTEM SHALL copy the selected citation format to the clipboard.
+  - THE SYSTEM SHALL display a confirmation message (e.g., "Citation copied to clipboard") after copying.
+- THE SYSTEM SHALL provide a "Save for offline reading" button.
 
 ---
 
 #### FE-PAGE-004: Opinions Blog List (`/blog`)
 
-**Description**: Same structure and behavior as FE-PAGE-002 but for opinion articles.
+**Description**: Same structure and behavior as FE-PAGE-002 but for opinion articles. Desktop uses traditional pagination; mobile uses infinite scroll.
 
 **Requirements**:
 
-- THE SYSTEM SHALL follow the same specifications as FE-PAGE-002 (Technical Blog List).
+- THE SYSTEM SHALL follow the same specifications as FE-PAGE-002 (Technical Blog List), including desktop pagination and mobile infinite scroll.
 - THE SYSTEM SHALL fetch data from `GET /blog` instead of `GET /technical`.
+- THE SYSTEM SHALL fetch categories from `GET /categories` (same cache as `/technical`).
 
 ---
 
@@ -98,7 +130,7 @@
 
 **Requirements**:
 
-- THE SYSTEM SHALL follow the same specifications as FE-PAGE-003 (Technical Blog Article).
+- THE SYSTEM SHALL follow the same specifications as FE-PAGE-003 (Technical Blog Article), including citation format selector.
 - THE SYSTEM SHALL fetch data from `GET /blog/{slug}.md` instead of `GET /technical/{slug}.md`.
 
 ---
@@ -128,10 +160,10 @@
   - Abstract
 - THE SYSTEM SHALL display a search bar at the top.
 - THE SYSTEM SHALL display filter controls for:
-  - Category (single-select dropdown)
+  - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
   - Tags (multi-select)
-  - Date range
-- THE SYSTEM SHALL paginate results (same behavior as FE-PAGE-002).
+  - Date range (filters on `date_updated`)
+- THE SYSTEM SHALL paginate results (same behavior as FE-PAGE-002: desktop pagination, mobile infinite scroll).
 
 ---
 
@@ -145,6 +177,41 @@
 - THE SYSTEM SHALL randomly select and display one humorous anecdote about things not being found.
 - THE SYSTEM SHALL provide a link back to the home page.
 - The list of anecdotes SHALL be hardcoded in the frontend (no API call needed).
+- THE SYSTEM SHALL include exactly 30 anecdotes, each with a source reference and link.
+- Anecdote list (each entry includes the anecdote text, source, and source URL):
+
+| #  | Anecdote | Source |
+|----|----------|--------|
+| 1  | "In 1998, a NASA Mars orbiter was lost because one team used metric units and another used imperial. It was never found." | [NASA Mars Climate Orbiter Mishap](https://solarsystem.nasa.gov/missions/mars-climate-orbiter/in-depth/) |
+| 2  | "The Library of Alexandria — humanity's greatest collection of knowledge — was lost to history. And you can't even find a web page." | [Library of Alexandria, Wikipedia](https://en.wikipedia.org/wiki/Library_of_Alexandria) |
+| 3  | "Amelia Earhart disappeared over the Pacific in 1937. She's still easier to find than this page." | [Amelia Earhart, Smithsonian](https://airandspace.si.edu/explore/stories/amelia-earhart) |
+| 4  | "In 1971, DB Cooper hijacked a plane, parachuted out with $200,000, and vanished forever. This page did the same, minus the money." | [DB Cooper, FBI](https://www.fbi.gov/history/famous-cases/db-cooper-hijacking) |
+| 5  | "The Roanoke Colony of 115 people vanished in the 1500s, leaving only the word 'CROATOAN.' This page left even less." | [Roanoke Colony, History.com](https://www.history.com/articles/what-happened-to-the-lost-colony-of-roanoke) |
+| 6  | "Jimmy Hoffa has been missing since 1975. At least he had a last known location." | [Jimmy Hoffa, Biography.com](https://www.biography.com/crime/jimmy-hoffa) |
+| 7  | "The Amber Room — an entire chamber of golden amber panels — was stolen by Nazis and never recovered. This page pulled the same trick." | [Amber Room, Smithsonian](https://www.smithsonianmag.com/history/a-brief-history-of-the-amber-room-160940121/) |
+| 8  | "Malaysia Airlines Flight 370 disappeared in 2014 with 239 people. We still can't find it — or this page." | [MH370, BBC](https://www.bbc.com/news/world-asia-26503141) |
+| 9  | "The Holy Grail has been sought for over a thousand years. This URL was sought for about 3 seconds." | [Holy Grail, Britannica](https://www.britannica.com/topic/Holy-Grail) |
+| 10 | "Nikola Tesla's missing papers after his death have fueled conspiracy theories for decades. This page is fueling one right now." | [Tesla's Missing Papers, History.com](https://www.history.com/articles/nikola-tesla-fbi-files-declassified-death-ray) |
+| 11 | "The Bermuda Triangle has allegedly swallowed ships and planes for centuries. Today it swallowed a URL." | [Bermuda Triangle, NOAA](https://oceanservice.noaa.gov/facts/bermudatri.html) |
+| 12 | "Ancient Romans lost an entire legion — the Ninth — and historians still argue about what happened. This page isn't even that interesting." | [Ninth Legion, Wikipedia](https://en.wikipedia.org/wiki/Legio_IX_Hispana) |
+| 13 | "In computing, a 'heisenbug' disappears when you try to debug it. This page is a heisenpage." | [Heisenbug, Jargon File](http://www.catb.org/jargon/html/H/heisenbug.html) |
+| 14 | "Schrödinger's cat is both alive and dead until observed. This page is both here and not here — but mostly not here." | [Schrödinger's cat, Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/qt-issues/#SchCat) |
+| 15 | "The Voynich Manuscript has baffled cryptographers for 600 years. This 404 page took about 0.6 seconds." | [Voynich Manuscript, Yale](https://beinecke.library.yale.edu/collections/highlights/voynich-manuscript) |
+| 16 | "Explorer Percy Fawcett vanished in the Amazon in 1925 searching for a lost city. You vanished searching for a lost page." | [Percy Fawcett, Britannica](https://www.britannica.com/biography/Percy-Harrison-Fawcett) |
+| 17 | "The entire nation of Atlantis supposedly sank into the ocean. This URL didn't even make a splash." | [Atlantis, National Geographic](https://www.nationalgeographic.com/science/article/atlantis) |
+| 18 | "There are an estimated 3 million shipwrecks on the ocean floor. And now there's one more — this URL." | [Shipwrecks, UNESCO](https://www.unesco.org/en/underwater-cultural-heritage) |
+| 19 | "Genghis Khan's tomb has been hidden for 800 years. This page's hiding spot? Also a mystery." | [Genghis Khan's Tomb, National Geographic](https://www.nationalgeographic.com/culture/article/genghis-khan-tomb) |
+| 20 | "Van Gogh couldn't find buyers for his paintings during his lifetime. You can't find this page in your lifetime." | [Van Gogh, Van Gogh Museum](https://www.vangoghmuseum.nl/en/art-and-stories/vincent-van-gogh-faq/how-many-paintings-did-van-gogh-sell-during-his-lifetime) |
+| 21 | "The Zodiac Killer's identity remained unknown for over 50 years. This page prefers anonymity too." | [Zodiac Killer, FBI](https://www.fbi.gov/history/famous-cases/zodiac-killer) |
+| 22 | "In 2013, Bitcoin developer James Howells accidentally threw away a hard drive containing 8,000 BTC. This page was discarded with similar carelessness." | [James Howells Bitcoin, The Guardian](https://www.theguardian.com/uk-news/2025/jan/09/man-james-howells-who-lost-bitcoin-hard-drive-loses-high-court-claim-newport-council) |
+| 23 | "The 'Wow!' signal from space in 1977 was never explained or repeated. Neither will this page." | [Wow! Signal, Wikipedia](https://en.wikipedia.org/wiki/Wow!_signal) |
+| 24 | "Oak Island's Money Pit has been excavated for 200+ years with nothing found. You've been here for 20 seconds with similar results." | [Oak Island, History Channel](https://www.history.com/shows/the-curse-of-oak-island) |
+| 25 | "The Sodder children vanished on Christmas Eve 1945 and were never found. This page vanished on a regular Tuesday." | [Sodder Children, Smithsonian](https://www.smithsonianmag.com/history/the-children-who-went-up-in-smoke-172429802/) |
+| 26 | "The Mary Celeste was found adrift in 1872 with no crew. This page was found adrift with no content." | [Mary Celeste, Britannica](https://www.britannica.com/topic/Mary-Celeste) |
+| 27 | "In 1962, three inmates escaped Alcatraz and were never found. This page has also escaped." | [Alcatraz Escape, FBI](https://www.fbi.gov/history/famous-cases/alcatraz-escape) |
+| 28 | "The Dyatlov Pass incident in 1959 left 9 hikers dead under mysterious circumstances. This page's disappearance is slightly less dramatic." | [Dyatlov Pass, National Geographic](https://www.nationalgeographic.com/science/article/has-science-solved-mystery-dyatlov-pass-deaths) |
+| 29 | "Dark matter makes up 27% of the universe but has never been directly observed. This page makes up 0% of this website and also can't be observed." | [Dark Matter, NASA](https://science.nasa.gov/astrophysics/focus-areas/what-is-dark-energy/) |
+| 30 | "A googol is 10^100 — a number so large it's practically unreachable. So is this page." | [Googol, Merriam-Webster](https://www.merriam-webster.com/dictionary/googol) |
 
 ---
 
@@ -195,17 +262,21 @@
 
 **Requirements**:
 
-- WHEN a user visits any page, THE SYSTEM SHALL send anonymous tracking data to the backend.
-- Tracking payload SHALL include:
-  - Browser name and version (from User-Agent)
-  - IP address (determined server-side from request headers)
-  - Current page URL (action)
-  - Referrer URL (if available)
-  - Timestamp
-- Tracking SHALL NOT include any personally identifiable information beyond IP address.
+- WHEN a user visits any page, THE SYSTEM SHALL send anonymous tracking data to the backend via `POST /t`.
+- THE SYSTEM SHALL authenticate the request using a Bearer Token (JWT).
+  - A static ID and static secret SHALL be embedded in the frontend code.
+  - These credentials SHALL be obfuscated in the frontend bundle.
+  - THE SYSTEM SHALL generate a JWT from these credentials to be sent as `Authorization: Bearer <token>` on each `POST /t` request.
+  - The JWT SHALL include claims that identify the request as originating from the legitimate frontend.
+- Tracking payload (JSON body) SHALL include:
+  - `page`: Current page URL
+  - `referrer`: Referrer URL (if available)
+  - `action`: User action identifier (e.g., `page_view`)
+  - `browser`: Browser name and version (from User-Agent, determined client-side)
+  - `connection_speed`: Connection speed info from Navigator.connection API (if available)
+- IP address and server-side timestamp are determined by the backend from request headers.
+- Tracking SHALL NOT include any personally identifiable information beyond what the browser naturally sends.
 - Tracking failures SHALL be silent (no error shown to user).
-
-> **Note**: See Clarification CLR-002 regarding GET-only constraint and tracking data transmission.
 
 ---
 
@@ -213,17 +284,17 @@
 
 **Requirements**:
 
-- WHEN a network error or slow loading occurs, THE SYSTEM SHALL send error data to the backend.
-- Error payload SHALL include:
-  - Error type and message
-  - Browser name and version
-  - IP address (determined server-side)
-  - Detected connection speed (via Navigator.connection API where available)
-  - Page URL where the error occurred
-  - Timestamp
+- WHEN a network error or slow loading occurs, THE SYSTEM SHALL send error data to the backend via `POST /t`.
+- THE SYSTEM SHALL use the same JWT authentication mechanism as FE-COMP-004.
+- Error payload (JSON body, sent to the same `POST /t` endpoint with `action: "error_report"`) SHALL include:
+  - `action`: `"error_report"`
+  - `error_type`: Error classification (e.g., `network`, `timeout`, `js_error`)
+  - `error_message`: Error description
+  - `page`: Page URL where the error occurred
+  - `browser`: Browser name and version
+  - `connection_speed`: Detected connection speed (via Navigator.connection API where available)
+- IP address and server-side timestamp are determined by the backend from request headers.
 - Error reporting failures SHALL be silent (no error shown to user).
-
-> **Note**: See Clarification CLR-002 regarding GET-only constraint and error data transmission.
 
 ---
 
@@ -233,7 +304,43 @@
 
 - THE SYSTEM SHALL serve a `robots.txt` file at the root of the domain.
 - THE SYSTEM SHALL specify crawl rules and rate limits for bots.
-- Specific rules: *See Clarification CLR-009*.
+- THE SYSTEM SHALL block crawlers from API-only paths and tracking endpoints.
+- See [07-observability-specifications.md](07-observability-specifications.md) OBS-007 for the full `robots.txt` content.
+
+---
+
+#### FE-COMP-007: Category Caching
+
+**Requirements**:
+
+- WHEN the frontend navigates to `/technical`, `/blog`, or `/others`, THE SYSTEM SHALL check sessionStorage for a cached categories list.
+- IF cached categories exist and are less than 24 hours old, THE SYSTEM SHALL use the cached list.
+- IF cached categories do not exist or are older than 24 hours, THE SYSTEM SHALL fetch categories from `GET /categories` and store the result in sessionStorage with a timestamp.
+- THE SYSTEM SHALL use the categories list to populate the category filter dropdown.
+
+---
+
+#### FE-COMP-008: Offline Reading
+
+**Requirements**:
+
+- THE SYSTEM SHALL NOT be installable as a Progressive Web App (PWA). No web app manifest with `display: standalone` or equivalent SHALL be provided.
+- THE SYSTEM SHALL use a service worker for offline reading support. The service worker enables intercepting navigation requests when offline and serving cached content. Using a service worker does NOT make the app installable — installability requires a web app manifest with specific fields.
+- THE SYSTEM SHALL support offline reading of previously downloaded articles.
+- **Smart Download (Heuristic Prefetching)**:
+  - THE SYSTEM SHALL track user browsing patterns on the frontend (no server calls for this tracking).
+  - Based on heuristics (e.g., articles the user has viewed partially, articles in the same category as recently read articles), THE SYSTEM SHALL prefetch and cache article content in the browser for offline reading.
+  - Prefetching SHALL happen in the background without affecting page performance.
+- **Manual Save**:
+  - WHEN the user clicks "Save for offline reading" on an article page (FE-PAGE-003, FE-PAGE-005) or the list view (FE-PAGE-002, FE-PAGE-004), THE SYSTEM SHALL download and store the full article content locally.
+- **Offline Availability Indicator**:
+  - In list views (FE-PAGE-002, FE-PAGE-004), each article item SHALL display an indicator showing whether the article is available for offline reading.
+- **Storage**:
+  - Offline articles SHALL be stored using the browser's Cache API or IndexedDB.
+  - THE SYSTEM SHALL manage storage limits gracefully, removing the oldest cached articles when storage is full.
+- **Reading Offline**:
+  - WHEN the user is offline and navigates to a cached article, THE SYSTEM SHALL render the article from local storage.
+  - WHEN the user is offline and navigates to a non-cached article, THE SYSTEM SHALL display a message indicating the article is not available offline.
 
 ---
 
