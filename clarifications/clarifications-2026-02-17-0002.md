@@ -15,6 +15,8 @@ The following items require your input to finalize the specifications. These wer
 - **A**: Return `200` with `{ "articles": [], "pagination": { "total": 0, ... } }` when query returns no results. Reserve `404` for truly missing resources (e.g., invalid slug in detail endpoint).
 - **B**: Keep `404` for empty results as currently specified.
 
+**Answer**
+Let's use A. Return 200 with empty articles, and let frontend handle the empty list by telling the user it doesn't know what they want to search or something clever. Make the message randomized and clever as well. If the user sends the search again that returns the same empty result, ask them what are they trying to do? and then randomize the answers to similar takes like "try and try will not make the results change" or "the definition of insanity from Farcry 3", etc...
 ---
 
 ### CLR-017: Rate Limiting State Storage
@@ -30,6 +32,8 @@ The following items require your input to finalize the specifications. These wer
 - **C**: Use **Firestore** for both rate counters and offender records (simpler stack, but adds latency per request).
 - **D**: Other approach.
 
+**Answer**
+Let's use A and Firestore.
 ---
 
 ### CLR-018: Default Sort Order for Article Listings
@@ -44,6 +48,8 @@ The following items require your input to finalize the specifications. These wer
 - **B**: Default sort by `date_created` descending (newest first).
 - **C**: Other field or order.
 
+**Answer**
+We only sort by date_updated, we will not sort by category or tags.
 ---
 
 ### CLR-019: Tag Filter Matching Logic
@@ -58,6 +64,8 @@ The following items require your input to finalize the specifications. These wer
 - **B**: **OR** — articles must contain at least ONE of the specified tags.
 - **C**: Let the user choose (add a `tag_match` parameter with values `all` or `any`).
 
+**Answer**
+Let's use C - let the user choose if all or any.
 ---
 
 ### CLR-020: Sitemap Generation
@@ -73,6 +81,8 @@ The following items require your input to finalize the specifications. These wer
 - **C**: **Scheduled generation** — a Cloud Scheduler job periodically regenerates the sitemap and stores it in Firebase Hosting / Cloud Storage.
 - **D**: **No sitemap needed** for now — defer to a later phase.
 
+**Answer**
+Let's have C but have it saved in Firestore and then use B to dynamic endpoint get it from Firestore.
 ---
 
 ### CLR-021: JWT Clock Skew Tolerance
@@ -87,6 +97,8 @@ The following items require your input to finalize the specifications. These wer
 - **B**: **60 seconds** — more lenient for users with slightly off clocks.
 - **C**: **0 seconds** — strict validation, no tolerance.
 
+**Answer**
+Use B - 60 seconds
 ---
 
 ### CLR-022: Naming Consistency — "Others" vs "Other Links"
@@ -101,6 +113,8 @@ The following items require your input to finalize the specifications. These wer
 - **B**: Rename the collection to `others` to match the route and endpoint.
 - **C**: Rename the route and endpoint to `/other-links` to match the collection.
 
+**Answer**
+Let's standardize to just `others`
 ---
 
 ### CLR-023: Offline Storage Mechanism
@@ -115,3 +129,11 @@ The following items require your input to finalize the specifications. These wer
 
 - **A**: Define it now: **Cache API** for article content responses, **IndexedDB** for metadata and reading state.
 - **B**: Leave as implementation detail — the spec only requires offline reading to work via service worker. The developer decides the storage mechanism.
+
+**Answer**
+Let's use both, Cache API for article content responses, and then use IndexedDB for metadata and reading state (like arrays and article data because take note article data, while it is returned by the API as markdown text, can still be put on the IndexedDB for easy retrieval without calling the backend with Cache API). Offline Retrieval Cookbook that we will use would be when calling URL, check if we have cache, use cache first, then load new data if it is updated and has internet.
+---
+
+## Other Notes:
+- Replace a different anecdote for the Malaysian Airlines anecdote for the 404 with another one as it may be too dark of a joke for others to read.
+- Prepare for me a draft costing for normal visitor usage per month, and if an article or two becomes a bit more famous with a spike of traffic. Use data from https://cloud.google.com/skus?hl=en if possible
