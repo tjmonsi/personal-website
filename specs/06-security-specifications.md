@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 1.1
+version: 1.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -50,6 +50,12 @@ tags: [security, rate-limiting, cors, authentication]
 ---
 
 ### SEC-002: Rate Limiting
+
+#### Rate Limiting Architecture
+
+- **Real-time rate counting**: Enforced by **Google Cloud Armor** at the load balancer level (see INFRA-005 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). Cloud Armor handles per-IP request counting and throttling. This avoids the need for in-memory rate counters in the Go application, which would be lost when Cloud Run instances scale down or restart.
+- **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The Go application checks Firestore for ban status on each request and enforces progressive banning tiers.
+- This two-layer approach ensures rate limiting works correctly across Cloud Run auto-scaling events while keeping the infrastructure simple (no Redis/Memorystore needed).
 
 #### Application-Level Rate Limiting
 
@@ -179,6 +185,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 - THE SYSTEM SHALL verify `iss` matches the expected client ID.
 - THE SYSTEM SHALL verify `exp` has not passed (token not expired).
 - THE SYSTEM SHALL verify `iat` is not in the future.
+- THE SYSTEM SHALL allow a clock skew tolerance of **60 seconds** when validating `exp` and `iat` claims, to accommodate minor clock drift between the client's device and the server.
 - IF any validation fails, THE SYSTEM SHALL return HTTP `403 Forbidden`.
 
 **Security Considerations**:

@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 1.1
+version: 1.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -219,6 +219,11 @@ Crawl-delay: 5
 
 Sitemap: https://tjmonserrat.com/sitemap.xml
 ```
+
+**Sitemap Generation**:
+- The sitemap is generated every 6 hours by a Cloud Scheduler job (see INFRA-008 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)).
+- The generated sitemap XML is stored in Firestore (`sitemap` collection, DM-010).
+- The `GET /sitemap.xml` API endpoint serves the sitemap from Firestore (see BE-API-011 in [03-backend-api-specifications.md](03-backend-api-specifications.md)).
 
 **Notes**:
 - The `robots.txt` is served from the frontend domain (`tjmonserrat.com`).

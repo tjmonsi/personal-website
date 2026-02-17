@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 1.1
+version: 1.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -127,9 +127,15 @@ ENTRYPOINT ["/server"]
 
 **Rate Limiting at Cloud Armor level**:
 
-- Threshold: 120 requests per minute per IP (2x the application-level limit, as a coarse first line of defense)
+- **Primary rate limiting enforcement**: Cloud Armor handles per-IP rate limiting at the load balancer level. This eliminates the need for application-level in-memory rate counters, which would not persist across Cloud Run instance scaling events.
+- Threshold: 120 requests per minute per IP (2x the application-level conceptual limit, as a coarse first line of defense)
 - Action: HTTP `429` response
-- Note: Application-level rate limiting (in Go) provides finer-grained control. Cloud Armor rate limiting serves as a first line of defense.
+- Cloud Armor rate limiting configuration maps to the application-level rate tiers:
+  - Regular users: 60 req/min
+  - Known bots: 10 req/min
+  - Tracking/error (`POST /t`): 30 req/min
+- **Progressive banning**: Offender records and ban state are stored in Firestore (`rate_limit_offenders` collection, DM-009). The Go application checks Firestore for ban status on each request and enforces progressive banning logic (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)).
+- Note: Cloud Armor provides the coarse rate limiting layer; the application reads offender state from Firestore to enforce progressive banning tiers (429 → 403 → 404).
 
 ---
 
@@ -192,6 +198,38 @@ ENTRYPOINT ["/server"]
 - `main` → Production
 - `staging` → Staging environment
 - Feature branches → PR preview (optional)
+
+---
+
+#### INFRA-008: Google Cloud Scheduler
+
+**Purpose**: Periodically regenerate the sitemap and store it in Firestore for serving via the `GET /sitemap.xml` API endpoint.
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Job name             | `generate-sitemap`                                 |
+| Schedule             | Every 6 hours (`0 */6 * * *`)                      |
+| Target               | Cloud Run backend API (internal HTTPS endpoint)    |
+| HTTP method          | POST                                               |
+| Target URL           | Internal endpoint on Cloud Run (e.g., `POST /internal/generate-sitemap`) |
+| Authentication       | OIDC token (service account with Cloud Run invoker role) |
+| Region               | `asia-southeast1`                                  |
+| Retry config         | Max 3 retries with exponential backoff             |
+
+**Sitemap Generation Logic** (executed by the Go backend when triggered):
+
+1. Query all published articles from `technical_articles` and `blog_articles` collections.
+2. Query all items from the `others` collection.
+3. Include static pages: `/`, `/technical`, `/blog`, `/socials`, `/others`.
+4. Build sitemap XML per the [Sitemaps protocol](https://www.sitemaps.org/protocol.html).
+5. Write the generated XML to the `sitemap` Firestore collection (DM-010).
+6. The `GET /sitemap.xml` public endpoint reads from this collection (BE-API-011).
+
+**Notes**:
+- The internal endpoint (`POST /internal/generate-sitemap`) SHALL NOT be exposed to public traffic via the Load Balancer. It SHALL only be callable by Cloud Scheduler using OIDC authentication.
+- The 6-hour schedule balances freshness with cost. Adjust based on content update frequency.
 
 ---
 

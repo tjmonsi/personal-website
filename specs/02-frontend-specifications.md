@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.1
+version: 1.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -62,7 +62,9 @@ tags: [frontend, nuxt4, vue3, spa]
 - THE SYSTEM SHALL display filter controls for:
   - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
   - Tags (multi-select)
+  - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter with values `all` or `any`. Default: "Match Any")
   - Date range for "last updated" (date picker range, filters on `date_updated`)
+- **Results are always sorted by `date_updated` descending** (most recently updated first). No sort controls are displayed to the user.
 - **Desktop pagination**:
   - THE SYSTEM SHALL paginate results showing the current page number and total pages.
   - THE SYSTEM SHALL display navigation buttons:
@@ -162,7 +164,9 @@ tags: [frontend, nuxt4, vue3, spa]
 - THE SYSTEM SHALL display filter controls for:
   - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
   - Tags (multi-select)
+  - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter. Default: "Match Any")
   - Date range (filters on `date_updated`)
+- **Results are always sorted by `date_updated` descending** (most recently updated first). No sort controls are displayed to the user.
 - THE SYSTEM SHALL paginate results (same behavior as FE-PAGE-002: desktop pagination, mobile infinite scroll).
 
 ---
@@ -189,7 +193,7 @@ tags: [frontend, nuxt4, vue3, spa]
 | 5  | "The Roanoke Colony of 115 people vanished in the 1500s, leaving only the word 'CROATOAN.' This page left even less." | [Roanoke Colony, History.com](https://www.history.com/articles/what-happened-to-the-lost-colony-of-roanoke) |
 | 6  | "Jimmy Hoffa has been missing since 1975. At least he had a last known location." | [Jimmy Hoffa, Biography.com](https://www.biography.com/crime/jimmy-hoffa) |
 | 7  | "The Amber Room — an entire chamber of golden amber panels — was stolen by Nazis and never recovered. This page pulled the same trick." | [Amber Room, Smithsonian](https://www.smithsonianmag.com/history/a-brief-history-of-the-amber-room-160940121/) |
-| 8  | "Malaysia Airlines Flight 370 disappeared in 2014 with 239 people. We still can't find it — or this page." | [MH370, BBC](https://www.bbc.com/news/world-asia-26503141) |
+| 8  | "In 1900, three lighthouse keepers on Eilean Mòr vanished without a trace. The light went out — just like this page." | [Flannan Isles Lighthouse, Wikipedia](https://en.wikipedia.org/wiki/Flannan_Isles_lighthouse) |
 | 9  | "The Holy Grail has been sought for over a thousand years. This URL was sought for about 3 seconds." | [Holy Grail, Britannica](https://www.britannica.com/topic/Holy-Grail) |
 | 10 | "Nikola Tesla's missing papers after his death have fueled conspiracy theories for decades. This page is fueling one right now." | [Tesla's Missing Papers, History.com](https://www.history.com/articles/nikola-tesla-fbi-files-declassified-death-ray) |
 | 11 | "The Bermuda Triangle has allegedly swallowed ships and planes for centuries. Today it swallowed a URL." | [Bermuda Triangle, NOAA](https://oceanservice.noaa.gov/facts/bermudatri.html) |
@@ -336,11 +340,45 @@ tags: [frontend, nuxt4, vue3, spa]
 - **Offline Availability Indicator**:
   - In list views (FE-PAGE-002, FE-PAGE-004), each article item SHALL display an indicator showing whether the article is available for offline reading.
 - **Storage**:
-  - Offline articles SHALL be stored using the browser's Cache API or IndexedDB.
+  - **Cache API**: THE SYSTEM SHALL use the Cache API (via service worker) to cache article content HTTP responses. This enables fast retrieval of full article content when offline or on repeat visits.
+  - **IndexedDB**: THE SYSTEM SHALL use IndexedDB to store article metadata (title, slug, category, tags, dates, abstract), reading state (e.g., reading progress, last accessed timestamp), and article content as structured data for quick retrieval without requiring a network request via the Cache API.
   - THE SYSTEM SHALL manage storage limits gracefully, removing the oldest cached articles when storage is full.
-- **Reading Offline**:
-  - WHEN the user is offline and navigates to a cached article, THE SYSTEM SHALL render the article from local storage.
-  - WHEN the user is offline and navigates to a non-cached article, THE SYSTEM SHALL display a message indicating the article is not available offline.
+- **Offline Retrieval Strategy (Cache-First)**:
+  - WHEN navigating to a URL, THE SYSTEM SHALL first check if cached content exists (Cache API for content responses, IndexedDB for metadata).
+  - IF cached content exists, THE SYSTEM SHALL render from cache immediately.
+  - IF the device has an active internet connection, THE SYSTEM SHALL check for updated content in the background. IF the content has been updated (based on `date_updated`), THE SYSTEM SHALL update the cache and optionally notify the user that newer content is available.
+  - IF the device is offline and no cached content exists, THE SYSTEM SHALL display a message indicating the article is not available offline.
+
+---
+
+#### FE-COMP-009: Empty Search Results Handling
+
+**Requirements**:
+
+- WHEN the backend returns `200` with an empty `items` array for a search or filter query, THE SYSTEM SHALL display a randomized clever message instead of a blank list.
+- THE SYSTEM SHALL maintain a list of at least 10 randomized empty-result messages. Examples:
+  - "Hmm, I've got nothing. Maybe try different words?"
+  - "The void stares back. No articles found."
+  - "Even my best search algorithms came up empty. That's... rare."
+  - "Zero results. Nada. Zilch. The page is as empty as my coffee cup."
+  - "I searched high and low. Mostly low. Found nothing."
+  - "This search returned exactly zero results. Let that sink in."
+  - "No matches found. Are you sure that's a real word?"
+  - "The articles are hiding. Very successfully."
+  - "Plot twist: there are no results."
+  - "You stumped me. Try a different search?"
+- **Repeated Empty Search Detection**:
+  - THE SYSTEM SHALL track consecutive empty search results in the current session (frontend-only, no server call).
+  - IF the user submits a search that returns the same empty result (same or similar query), THE SYSTEM SHALL escalate the message to a more humorous tone. Examples:
+    - "What are you trying to find? I genuinely want to help."
+    - "Try and try again, but the results won't change."
+    - "Did I ever tell you what the definition of insanity is? Insanity is doing the exact same thing over and over again expecting things to change."
+    - "You've searched for this before. The answer is still nothing."
+    - "Persistence is admirable, but the database is still empty for this query."
+    - "Third time's a charm? Not this time."
+    - "At this point, I think you're just testing me."
+  - THE SYSTEM SHALL reset the repeated search counter when the user submits a different search query that returns results.
+- Empty result messages SHALL be hardcoded in the frontend (no API call needed).
 
 ---
 

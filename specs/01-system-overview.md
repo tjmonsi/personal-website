@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 1.1
+version: 1.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -69,6 +69,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 │                     │     │  GET  /socials              │
 │                     │     │  GET  /others               │
 │                     │     │  GET  /categories           │
+│                     │     │  GET  /sitemap.xml          │
 │                     │     │  POST /t                    │
 └─────────────────────┘     └─────────────┬──────────────┘
                                           │
