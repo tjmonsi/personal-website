@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 2.1
+version: 2.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -83,10 +83,10 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-stu
 | Container runtime    | Go binary in minimal Docker image |
 | Region               | `asia-southeast1`               |
 | Min instances        | 0 (scale to zero)               |
-| Max instances        | *TBD based on budget*           |
-| CPU                  | 1 vCPU (initial)                |
-| Memory               | 256 MB (initial)                |
-| Concurrency          | 80 (default)                    |
+| Max instances        | 5                               |
+| CPU                  | 1 vCPU                          |
+| Memory               | 1 GB                            |
+| Concurrency          | 160                             |
 | Request timeout      | 30 seconds                      |
 | Startup CPU boost    | Enabled                         |
 | Ingress              | Internal + Cloud Load Balancing |
