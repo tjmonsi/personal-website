@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.7
+version: 1.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -266,10 +266,10 @@ tags: [frontend, nuxt4, vue3, spa]
 - THE SYSTEM SHALL hardcode the privacy policy content in the frontend (no backend endpoint needed).
 - THE SYSTEM SHALL display a "Last updated" date at the top of the privacy policy.
 - THE SYSTEM SHALL include the following sections in the privacy policy:
-  - **Data We Collect**: Truncated IP address (last octet zeroed for IPv4, last 80 bits zeroed for IPv6), browser name and version, pages visited, referrer URL, connection speed information, and timestamps. No full IP addresses are stored.
-  - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited. Client-side error reporting for performance monitoring. No cookies, session tracking, or third-party scripts are used.
-  - **Purpose of Data Collection**: Understanding site usage patterns, monitoring site performance, improving user experience, and detecting abuse.
-  - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond truncated IP and browser information, no third-party tracking scripts, no advertising data.
+  - **Data We Collect**: Truncated IP address (last octet zeroed for IPv4, last 80 bits zeroed for IPv6), browser name and version, pages visited, referrer URL, link clicks (which URLs you click on), time-on-page engagement milestones (whether you stay on a page for 1, 2, or 5 minutes), connection speed information, a randomized session identifier (not linked to your identity), and timestamps. No full IP addresses are stored.
+  - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited, links are clicked, and engagement milestones are reached. Client-side error reporting for performance monitoring. A random session identifier is generated in your browser for each visit and is not stored after you close the tab. No cookies, session tracking, or third-party scripts are used.
+  - **Purpose of Data Collection**: Understanding how helpful and engaging the site's content is to readers, monitoring site performance, improving user experience, identifying which content resonates with visitors, and discriminating between real human visitors and automated bots or scrapers that collect text without reading it. The engagement data (time on page, link clicks) helps the site owner understand whether content is genuinely useful rather than just visited.
+  - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond truncated IP and browser information, no cross-session tracking (i.e., we cannot recognize you on a return visit), no third-party tracking scripts, no advertising data.
   - **Data Retention**: Visitor tracking data and error reports are stored as anonymized log entries in Google BigQuery for long-term analytics and trend analysis. This data is automatically deleted after 2 years. The same anonymization (IP truncation) applies — no full IP addresses are stored in BigQuery. No tracking or error report data is stored in the application database.
   - **Analytics**: The website owner uses Looker Studio dashboards connected to BigQuery to view aggregate analytics (e.g., unique visitor counts, popular pages, referrer sources, browser distribution). These dashboards are private and not publicly accessible. No data is shared with third parties.
   - **Data Storage**: Data is stored in Google Cloud infrastructure in the `asia-southeast1` region.
@@ -353,13 +353,58 @@ tags: [frontend, nuxt4, vue3, spa]
   - These credentials SHALL be obfuscated in the frontend bundle.
   - THE SYSTEM SHALL generate a JWT from these credentials to be sent as `Authorization: Bearer <token>` on each `POST /t` request.
   - The JWT SHALL include claims that identify the request as originating from the legitimate frontend.
+
+**Visitor Session ID**:
+
+- WHEN the frontend application initializes (first page load in a browser tab/window), THE SYSTEM SHALL check `sessionStorage` for an existing `visitor_session_id`.
+- IF no `visitor_session_id` exists, THE SYSTEM SHALL generate a new UUID v4 and store it in `sessionStorage` under the key `visitor_session_id`.
+- THE SYSTEM SHALL include the `visitor_session_id` in every `POST /t` request body.
+- The `visitor_session_id` is purely random and not derived from any user-identifiable information. It exists only for the duration of the browser session (tab/window lifetime) and is not persisted across sessions.
+- The backend uses this value (combined with the truncated IP and User-Agent) to compute a non-reversible `visitor_id` hash for unique visitor counting and bot discrimination (see BE-API-009).
+
+**Page View Tracking**:
+
 - Tracking payload (JSON body) SHALL include:
-  - `page`: Current page URL
+  - `action`: `"page_view"`
+  - `visitor_session_id`: The session-scoped UUID v4 from `sessionStorage`
+  - `page`: Current page URL path
   - `referrer`: Referrer URL (if available)
-  - `action`: User action identifier (e.g., `page_view`)
   - `browser`: Browser name and version (from User-Agent, determined client-side)
   - `connection_speed`: Connection speed info from Navigator.connection API (if available)
 - IP address and server-side timestamp are determined by the backend from request headers.
+
+**Link Click Tracking**:
+
+- WHEN a user clicks any anchor (`<a>`) element on a page, THE SYSTEM SHALL send a `link_click` tracking event to the backend via `POST /t`.
+- Link click payload (JSON body) SHALL include:
+  - `action`: `"link_click"`
+  - `visitor_session_id`: The session-scoped UUID v4 from `sessionStorage`
+  - `page`: Current page URL path where the click occurred
+  - `clicked_url`: The `href` value of the clicked link
+  - `browser`: Browser name and version
+  - `connection_speed`: Connection speed info (if available)
+- THE SYSTEM SHALL use event delegation (a single listener on a common ancestor) rather than attaching individual listeners to every anchor element.
+- THE SYSTEM SHALL NOT block or delay the navigation. The tracking request SHALL be sent asynchronously (fire-and-forget via `navigator.sendBeacon()` or a non-blocking `fetch`).
+- THE SYSTEM SHALL NOT track clicks on the same-page anchor links (hash-only links like `#section`) as they are already covered by hash fragment navigation.
+
+**Time-on-Page Tracking**:
+
+- WHEN a user remains on a page for 1 minute, 2 minutes, or 5 minutes, THE SYSTEM SHALL send a `time_on_page` tracking event to the backend via `POST /t` for each milestone reached.
+- Time-on-page payload (JSON body) SHALL include:
+  - `action`: `"time_on_page"`
+  - `visitor_session_id`: The session-scoped UUID v4 from `sessionStorage`
+  - `page`: Current page URL path
+  - `milestone`: One of `"1min"`, `"2min"`, `"5min"`
+  - `browser`: Browser name and version
+  - `connection_speed`: Connection speed info (if available)
+- THE SYSTEM SHALL use `setTimeout` or `setInterval` to track elapsed time on the page.
+- THE SYSTEM SHALL clear all pending timers when the user navigates away from the page (SPA route change or `beforeunload`).
+- THE SYSTEM SHALL only fire each milestone once per page visit. If the user navigates away and returns to the same page, the timer resets.
+- THE SYSTEM SHALL pause the timer when the page is not visible (using the Page Visibility API `document.visibilityState`) and resume when the page becomes visible again. Only active foreground time counts toward milestones.
+- THE SYSTEM SHALL use `navigator.sendBeacon()` as the preferred method for sending milestone events, as it is reliable even during page unload.
+
+**General Tracking Rules**:
+
 - Tracking SHALL NOT include any personally identifiable information beyond what the browser naturally sends.
 - Tracking failures SHALL be silent (no error shown to user).
 
@@ -373,6 +418,7 @@ tags: [frontend, nuxt4, vue3, spa]
 - THE SYSTEM SHALL use the same JWT authentication mechanism as FE-COMP-004.
 - Error payload (JSON body, sent to the same `POST /t` endpoint with `action: "error_report"`) SHALL include:
   - `action`: `"error_report"`
+  - `visitor_session_id`: The session-scoped UUID v4 from `sessionStorage` (same as FE-COMP-004)
   - `error_type`: Error classification (e.g., `network`, `timeout`, `js_error`)
   - `error_message`: Error description
   - `page`: Page URL where the error occurred

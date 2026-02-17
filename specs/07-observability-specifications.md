@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 2.0
+version: 2.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -50,7 +50,7 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 > **Note on `labels`**: The `labels` field is included only when applicable. When an internal server error is masked as a 404 response, the log entry MUST include `"masked_500": true` in the `labels` object. This label is used by OBS-005 alerting to detect masked 500 errors.
 
 > **Note on `log_type`**: The `log_type` field is included only for `POST /t` request log entries. It enables BigQuery log sink routing (INFRA-010) to separate frontend tracking and error logs into dedicated tables.
-> - `"frontend_tracking"` — for `POST /t` requests with `action: "page_view"` or other tracking actions.
+> - `"frontend_tracking"` — for `POST /t` requests with `action: "page_view"`, `"link_click"`, or `"time_on_page"`.
 > - `"frontend_error"` — for `POST /t` requests with `action: "error_report"`.
 > - Omitted for all other requests (standard backend request logs).
 ```
@@ -68,8 +68,8 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 **Mandatory Logging Events**:
 
 - Every incoming request (INFO): method, path, status, latency
-- Every `POST /t` tracking request (INFO): include `log_type: "frontend_tracking"` and the tracking payload fields (page, referrer, action, browser, connection_speed) in the structured log entry
-- Every `POST /t` error report (INFO): include `log_type: "frontend_error"` and the error payload fields (error_type, error_message, page, browser, connection_speed) in the structured log entry
+- Every `POST /t` tracking request (INFO): include `log_type: "frontend_tracking"`, the `visitor_id` (server-computed hash), and the tracking payload fields (page, referrer, action, browser, connection_speed, plus action-specific fields such as `clicked_url` for `link_click` and `milestone` for `time_on_page`) in the structured log entry
+- Every `POST /t` error report (INFO): include `log_type: "frontend_error"`, the `visitor_id`, and the error payload fields (error_type, error_message, page, browser, connection_speed) in the structured log entry
 - Rate limit triggered (WARNING): client identifier, endpoint, offense count
 - Rate limit ban applied (WARNING): client identifier, ban tier, expiry
 - Internal error masked as 404 (ERROR): full error details
@@ -131,21 +131,26 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 **Data Collected**:
 
-| Data Point          | Source                          | Storage                          |
-| ------------------- | ------------------------------- | -------------------------------- |
-| Page visited        | Frontend sends via `POST /t`    | Structured log → BigQuery        |
-| Referrer URL        | Frontend sends in request body  | Structured log → BigQuery        |
-| Browser + version   | Frontend sends in request body  | Structured log → BigQuery        |
-| IP address          | Request source IP / `X-Forwarded-For` | Structured log → BigQuery  |
-| User action         | Frontend sends action type      | Structured log → BigQuery        |
-| Connection speed    | Frontend sends from Navigator.connection API | Structured log → BigQuery |
-| Timestamp           | Server-side UTC timestamp       | Structured log → BigQuery        |
+| Data Point            | Source                          | Storage                          |
+| --------------------- | ------------------------------- | -------------------------------- |
+| Visitor ID            | Server-computed SHA-256 hash of `visitor_session_id` + truncated IP + User-Agent (see BE-API-009) | Structured log → BigQuery |
+| Visitor session ID    | Frontend-generated UUID v4 per browser session (sessionStorage) | Structured log → BigQuery |
+| Page visited          | Frontend sends via `POST /t`    | Structured log → BigQuery        |
+| Referrer URL          | Frontend sends in request body  | Structured log → BigQuery        |
+| Browser + version     | Frontend sends in request body  | Structured log → BigQuery        |
+| IP address            | Request source IP / `X-Forwarded-For` | Structured log → BigQuery  |
+| User action           | Frontend sends action type (`page_view`, `link_click`, `time_on_page`) | Structured log → BigQuery |
+| Clicked URL           | Frontend sends target URL (for `link_click` action only) | Structured log → BigQuery |
+| Time-on-page milestone| Frontend sends milestone reached: `1min`, `2min`, `5min` (for `time_on_page` action only) | Structured log → BigQuery |
+| Connection speed      | Frontend sends from Navigator.connection API | Structured log → BigQuery |
+| Timestamp             | Server-side UTC timestamp       | Structured log → BigQuery        |
 
 **Privacy Measures**:
 
-- No cookies or session tracking
-- No fingerprinting beyond IP + User-Agent
-- Data auto-expires after 90 days (TTL index) in Firestore
+- No cookies or persistent cross-session tracking.
+- The `visitor_session_id` is a random UUID v4 generated per browser session and stored in `sessionStorage`. It does not persist across sessions or tabs.
+- The `visitor_id` is a SHA-256 hash of (`visitor_session_id` + truncated IP + User-Agent). It is non-reversible and cannot be used to identify real-world individuals. It exists solely to compute unique visitor counts and distinguish human browsing patterns from automated bot traffic.
+- No fingerprinting beyond truncated IP + User-Agent + session-scoped random ID.
 - IP addresses SHALL be truncated before storage: zero the last octet for IPv4 (e.g., `203.0.113.42` → `203.0.113.0`) and zero the last 80 bits for IPv6. This truncation happens in the Go backend before emitting structured log entries (which flow to BigQuery via INFRA-010).
 - Tracking and error data is NOT stored in Firestore. The `POST /t` handler emits structured log entries to stdout, which Cloud Logging ingests and routes to BigQuery via log sinks (INFRA-010). BigQuery is the sole persistence layer for tracking and error report data.
 - Data is retained for up to 2 years in BigQuery (see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)).
@@ -269,13 +274,17 @@ const speedInfo = connection ? {
 
 **Analytics Dashboard** (Looker Studio via BigQuery — see INFRA-010, INFRA-011):
 
-- Unique visitors (distinct IPs per time period)
+- Unique visitors (distinct `visitor_id` values per time period)
 - Page views over time (total and per-page)
 - Top pages by visit count
 - Referrer sources breakdown
 - Browser distribution
 - Geographic distribution (from IP)
 - Connection speed analysis
+- Link click analysis (most-clicked URLs, click-through rate per page)
+- Time-on-page engagement (percentage of visitors reaching 1 min, 2 min, 5 min milestones per page)
+- Content helpfulness score (derived from engagement milestones and link click depth)
+- Bot vs. human traffic discrimination (visitors with no `time_on_page` events, abnormal page view velocity)
 - Frontend error trends (frequency, types, affected pages)
 - Error-browser correlation
 - Backend error trends and masked 500 tracking
