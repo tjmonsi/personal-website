@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.5
+version: 1.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -26,6 +26,10 @@ tags: [frontend, nuxt4, vue3, spa]
 | Infinite Scroll  | A pattern where content loads automatically as the user scrolls down, without explicit pagination controls |
 | Smart Download   | Heuristic-based prefetching of article content for offline reading based on user browsing patterns |
 | sessionStorage   | Browser storage that persists for the duration of a page session |
+| URL State Synchronization | The practice of reflecting UI state (search queries, filters, pagination) in the browser URL query parameters, enabling deep linking and shareability |
+| Hash Fragment    | The portion of a URL after the `#` symbol (e.g., `#section-title`), used to identify and link to a specific section within a page |
+| Deep Link        | A URL that encodes enough state to restore a specific view, including active search terms, applied filters, and current page |
+| Heading Slug     | A URL-safe string derived from heading text by converting to lowercase, replacing spaces with hyphens, and removing special characters (e.g., "My Section Title" → `my-section-title`) |
 
 ---
 
@@ -76,6 +80,17 @@ tags: [frontend, nuxt4, vue3, spa]
   - THE SYSTEM SHALL display a loading indicator while fetching additional results.
   - THE SYSTEM SHALL stop fetching when all results have been loaded.
 - THE SYSTEM SHALL allow the user to tap/click a "Save for offline" action on each article in the list view.
+- **URL State Synchronization** (see FE-COMP-011):
+  - THE SYSTEM SHALL reflect the current search and filter state in the browser URL query parameters.
+  - URL parameter names SHALL match the backend API parameter names: `q`, `category`, `tags`, `tag_match`, `date_from`, `date_to`, `page`.
+  - WHEN the user changes any search, filter, or pagination value, THE SYSTEM SHALL update the URL using `history.pushState()`.
+  - WHEN the user loads the page with URL query parameters present, THE SYSTEM SHALL initialize the search bar, filter controls, and pagination from those parameters (deep linking).
+  - WHEN the user navigates back or forward in the browser, THE SYSTEM SHALL restore the UI state from the URL parameters via the `popstate` event.
+  - Default values (empty search, no category, no tags, `tag_match=any`, no date range, `page=1`) SHALL NOT appear in the URL. Only non-default values are included.
+- **Copy Article Link**:
+  - Each article item in the list SHALL display a link/share icon button.
+  - WHEN the user clicks the copy link button, THE SYSTEM SHALL copy the full article URL (e.g., `https://tjmonsi.com/technical/slug.md`) to the clipboard.
+  - THE SYSTEM SHALL display a brief confirmation message (e.g., "Link copied to clipboard") after copying.
 
 ---
 
@@ -98,10 +113,19 @@ tags: [frontend, nuxt4, vue3, spa]
   - Default state: collapsed
   - WHEN expanded, shows version history entries with date and description
 - THE SYSTEM SHALL render the markdown article body.
-- THE SYSTEM SHALL display a table of contents on the right side:
-  - Generated from article headings (H2, H3, H4)
-  - Each entry is a clickable anchor link
-  - Sticky/fixed position while scrolling
+- **Heading Anchors**:
+  - THE SYSTEM SHALL generate an `id` attribute for each rendered heading (H2, H3, H4) using a heading slug derived from the heading text (lowercase, spaces replaced with hyphens, special characters removed).
+  - IF duplicate heading slugs exist within the same article, THE SYSTEM SHALL append a numeric suffix (e.g., `my-heading`, `my-heading-1`, `my-heading-2`).
+  - Each heading SHALL display a link icon button (e.g., a chain-link icon) on hover or focus.
+  - WHEN the user clicks the heading link icon, THE SYSTEM SHALL copy the full URL with the hash fragment (e.g., `https://tjmonsi.com/technical/slug.md#heading-slug`) to the clipboard.
+  - THE SYSTEM SHALL display a brief confirmation message (e.g., "Link copied to clipboard") after copying.
+- **Table of Contents (Right Side Navigation)**:
+  - THE SYSTEM SHALL display a table of contents on the right side, generated from article headings (H2, H3, H4).
+  - Each entry SHALL be a clickable anchor link that scrolls to the corresponding heading.
+  - WHEN the user clicks a table of contents entry, THE SYSTEM SHALL update the URL hash fragment to reflect the target heading (e.g., `#heading-slug`) using `history.pushState()`.
+  - WHEN the page loads with a hash fragment in the URL, THE SYSTEM SHALL scroll to the corresponding heading.
+  - The table of contents SHALL remain in a sticky/fixed position while scrolling.
+  - THE SYSTEM SHALL visually highlight the currently active heading in the table of contents as the user scrolls through the article (scroll spy).
 - THE SYSTEM SHALL display a citation section with a format selector:
   - The user SHALL be able to select from multiple citation formats:
     - **APA**: `Monserrat, T.J. (2025). Article Title. tjmonsi.com. https://tjmonsi.com/technical/slug.md`
@@ -121,9 +145,10 @@ tags: [frontend, nuxt4, vue3, spa]
 
 **Requirements**:
 
-- THE SYSTEM SHALL follow the same specifications as FE-PAGE-002 (Technical Blog List), including desktop pagination and mobile infinite scroll.
+- THE SYSTEM SHALL follow the same specifications as FE-PAGE-002 (Technical Blog List), including desktop pagination, mobile infinite scroll, URL state synchronization, and copy article link.
 - THE SYSTEM SHALL fetch data from `GET /blog` instead of `GET /technical`.
 - THE SYSTEM SHALL fetch categories from `GET /categories` (same cache as `/technical`).
+- Article link URLs SHALL use the `/blog/` path prefix (e.g., `https://tjmonsi.com/blog/slug.md`).
 
 ---
 
@@ -133,7 +158,7 @@ tags: [frontend, nuxt4, vue3, spa]
 
 **Requirements**:
 
-- THE SYSTEM SHALL follow the same specifications as FE-PAGE-003 (Technical Blog Article), including citation format selector and YAML front matter parsing.
+- THE SYSTEM SHALL follow the same specifications as FE-PAGE-003 (Technical Blog Article), including citation format selector, YAML front matter parsing, heading anchors with copy link, and table of contents with URL hash fragment synchronization.
 - THE SYSTEM SHALL fetch data from `GET /blog/{slug}.md` instead of `GET /technical/{slug}.md`.
 
 ---
@@ -169,6 +194,17 @@ tags: [frontend, nuxt4, vue3, spa]
   - Date range (filters on `date_updated`)
 - **Results are always sorted by `date_updated` descending** (most recently updated first). No sort controls are displayed to the user.
 - THE SYSTEM SHALL paginate results (same behavior as FE-PAGE-002: desktop pagination, mobile infinite scroll).
+- **URL State Synchronization** (see FE-COMP-011):
+  - THE SYSTEM SHALL reflect the current search and filter state in the browser URL query parameters.
+  - URL parameter names SHALL match the backend API parameter names: `q`, `category`, `tags`, `tag_match`, `date_from`, `date_to`, `page`.
+  - WHEN the user changes any search, filter, or pagination value, THE SYSTEM SHALL update the URL using `history.pushState()`.
+  - WHEN the user loads the page with URL query parameters present, THE SYSTEM SHALL initialize the search bar, filter controls, and pagination from those parameters (deep linking).
+  - WHEN the user navigates back or forward in the browser, THE SYSTEM SHALL restore the UI state from the URL parameters via the `popstate` event.
+  - Default values SHALL NOT appear in the URL.
+- **Copy Item Link**:
+  - Each item in the list SHALL display a link/share icon button.
+  - WHEN the user clicks the copy link button, THE SYSTEM SHALL copy the item's external URL to the clipboard.
+  - THE SYSTEM SHALL display a brief confirmation message (e.g., "Link copied to clipboard") after copying.
 
 ---
 
@@ -442,6 +478,36 @@ tags: [frontend, nuxt4, vue3, spa]
   - A copyright notice: `© TJ Monserrat`.
   - A link to the socials page (`/socials`).
 - THE SYSTEM SHALL render the footer consistently across desktop, tablet, and mobile viewports.
+
+---
+
+#### FE-COMP-011: URL State Synchronization
+
+**Requirements**:
+
+- THE SYSTEM SHALL synchronize the UI state with the browser URL on all pages that have search, filter, or navigation controls (FE-PAGE-002, FE-PAGE-004, FE-PAGE-007 for query parameters; FE-PAGE-003, FE-PAGE-005 for hash fragments).
+- **Query Parameter Synchronization** (list/search pages):
+  - THE SYSTEM SHALL use the browser History API (`history.pushState()`) to update the URL when the user changes search, filter, or pagination state.
+  - THE SYSTEM SHALL NOT trigger a full page reload when updating URL parameters.
+  - THE SYSTEM SHALL listen for the `popstate` event to restore UI state when the user navigates with browser back/forward buttons.
+  - THE SYSTEM SHALL parse URL query parameters on initial page load and initialize all UI controls (search bar, filter dropdowns, date pickers, pagination) to match the URL state (deep linking).
+  - THE SYSTEM SHALL encode parameter values using standard URL encoding (`encodeURIComponent`).
+  - THE SYSTEM SHALL omit default values from the URL to keep URLs clean:
+    - Empty `q` (no search) → omit `q`
+    - No `category` selected → omit `category`
+    - No `tags` selected → omit `tags`
+    - `tag_match=any` (default) → omit `tag_match`
+    - No date range → omit `date_from` and `date_to`
+    - `page=1` (first page) → omit `page`
+  - WHEN the user clears all filters and search, THE SYSTEM SHALL restore the URL to the base path (e.g., `/technical`).
+- **Hash Fragment Synchronization** (article pages):
+  - THE SYSTEM SHALL update the URL hash fragment when the user clicks a table of contents entry or a heading link icon.
+  - THE SYSTEM SHALL scroll to the target heading when the page loads with a hash fragment in the URL.
+  - THE SYSTEM SHALL use `history.pushState()` for hash fragment updates to enable browser back/forward navigation between sections.
+- **Copy to Clipboard**:
+  - THE SYSTEM SHALL use the Clipboard API (`navigator.clipboard.writeText()`) for all copy link operations.
+  - IF the Clipboard API is not available (e.g., non-HTTPS context in development), THE SYSTEM SHALL fall back to a `document.execCommand('copy')` approach.
+  - THE SYSTEM SHALL display a confirmation message via a snackbar or tooltip (e.g., "Link copied to clipboard") that auto-dismisses after 2 seconds.
 
 ---
 
