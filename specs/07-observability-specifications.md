@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 1.5
+version: 1.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -127,8 +127,9 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 - No cookies or session tracking
 - No fingerprinting beyond IP + User-Agent
-- Data auto-expires after 90 days (TTL index)
-- IP addresses may be truncated (e.g., zero last octet for IPv4)
+- Data auto-expires after 90 days (TTL index) in Firestore
+- IP addresses SHALL be truncated before storage: zero the last octet for IPv4 (e.g., `203.0.113.42` → `203.0.113.0`) and zero the last 80 bits for IPv6. This truncation happens in the Go backend before writing to Firestore and before emitting structured log entries (which flow to BigQuery via INFRA-010).
+- The same anonymized data is exported to BigQuery for long-term analytics (retained for up to 2 years — see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md))
 
 ---
 
@@ -171,7 +172,7 @@ const speedInfo = connection ? {
 | HTTP errors           | Non-200 responses from API                  |
 | JavaScript errors     | Uncaught exceptions, promise rejections     |
 
-**Data Retention**: 30 days (TTL auto-expiry).
+**Data Retention**: 30 days (TTL auto-expiry) in Firestore. Error report data is also exported to BigQuery (`frontend_error_logs` table) and retained for up to 2 years (see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). The same IP truncation applies — no full IP addresses are stored.
 
 ---
 

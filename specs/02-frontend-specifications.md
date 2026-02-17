@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.4
+version: 1.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -230,11 +230,13 @@ tags: [frontend, nuxt4, vue3, spa]
 - THE SYSTEM SHALL hardcode the privacy policy content in the frontend (no backend endpoint needed).
 - THE SYSTEM SHALL display a "Last updated" date at the top of the privacy policy.
 - THE SYSTEM SHALL include the following sections in the privacy policy:
-  - **Data We Collect**: IP address (may be truncated), browser name and version, pages visited, referrer URL, connection speed information, and timestamps.
-  - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited. Client-side error reporting for performance monitoring.
+  - **Data We Collect**: Truncated IP address (last octet zeroed for IPv4, last 80 bits zeroed for IPv6), browser name and version, pages visited, referrer URL, connection speed information, and timestamps. No full IP addresses are stored.
+  - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited. Client-side error reporting for performance monitoring. No cookies, session tracking, or third-party scripts are used.
   - **Purpose of Data Collection**: Understanding site usage patterns, monitoring site performance, improving user experience, and detecting abuse.
-  - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond IP and User-Agent, no third-party tracking scripts, no advertising data.
-  - **Data Retention**: Visitor tracking data is automatically deleted after 90 days. Error reports are automatically deleted after 30 days.
+  - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond truncated IP and browser information, no third-party tracking scripts, no advertising data.
+  - **Data Retention (Short-Term)**: Visitor tracking data in the application database is automatically deleted after 90 days. Error reports are automatically deleted after 30 days.
+  - **Data Retention (Long-Term Analytics)**: Anonymized log data is exported to Google BigQuery for long-term analytics and trend analysis. This data is automatically deleted after 2 years. The same anonymization (IP truncation) applies — no full IP addresses are stored in BigQuery.
+  - **Analytics**: The website owner uses Looker Studio dashboards connected to BigQuery to view aggregate analytics (e.g., unique visitor counts, popular pages, referrer sources, browser distribution). These dashboards are private and not publicly accessible. No data is shared with third parties.
   - **Data Storage**: Data is stored in Google Cloud infrastructure in the `asia-southeast1` region.
   - **Your Rights**: Users may contact TJ Monserrat to request information about or deletion of any data associated with their IP address.
   - **Contact**: Link to the socials/contact page (`/socials`) for inquiries.

@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 1.6
+version: 1.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -140,7 +140,7 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 | AD-014 | Cloud Function for offense tracking from Cloud Armor logs | A log sink routes Cloud Armor rate-limit (429) events to a Cloud Function, which writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor's request-level rate limiting and the application's progressive banning logic. |
 | AD-015 | Cloud Armor Adaptive Protection enabled           | Cloud Armor's adaptive protection provides automatic, ML-based escalating DDoS mitigation. This complements application-level progressive banning with infrastructure-level protection that requires no manual rule updates. |
-| AD-016 | BigQuery log sinks for analytics                  | All Cloud Logging logs are exported to a BigQuery dataset (`website_logs`) via 5 dedicated log sinks — enabling SQL-based analytics, long-term retention, and Looker Studio dashboards without impacting operational logging. |
+| AD-016 | BigQuery log sinks for analytics                  | All Cloud Logging logs are exported to a BigQuery dataset (`website_logs`) via 5 dedicated log sinks — enabling SQL-based analytics, up to 2 years of retention, and Looker Studio dashboards without impacting operational logging. IP addresses are truncated before logging to ensure anonymization in BigQuery. |
 | AD-017 | Looker Studio for analytics dashboards            | Owner-operated Looker Studio dashboards connect to BigQuery via a service account with read-only access, providing visitor analytics (unique visitors, page views, referrer sources, etc.) without third-party analytics tools. |
 
 ### Deployment Topology

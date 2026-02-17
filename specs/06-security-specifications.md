@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 1.5
+version: 1.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -290,11 +290,42 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 ### SEC-007: Data Privacy
 
-- Tracking data (DM-007) SHALL be anonymized to the extent possible.
-- IP addresses SHALL be stored but MAY be hashed or truncated for privacy compliance.
+**Anonymization Requirements**:
+
+- IP addresses SHALL be truncated **before** writing to any data store (Firestore or Cloud Logging/BigQuery):
+  - IPv4: Zero the last octet (e.g., `203.0.113.42` → `203.0.113.0`)
+  - IPv6: Zero the last 80 bits
+- THE SYSTEM SHALL NOT store full IP addresses anywhere in the system.
+- THE SYSTEM SHALL NOT use cookies, session identifiers, user accounts, or device fingerprinting.
+- The only personal-adjacent data collected is: truncated IP address, browser name/version, pages visited, referrer URL, connection speed information, and timestamps.
+
+**Data Retention Summary**:
+
+| Data Store / Table                  | Data Type                          | Retention Period | Deletion Method       |
+| ----------------------------------- | ---------------------------------- | ---------------- | --------------------- |
+| Firestore `tracking` (DM-007)       | Anonymous page visit tracking      | 90 days          | TTL auto-expiry index |
+| Firestore `error_reports` (DM-008)  | Frontend error reports             | 30 days          | TTL auto-expiry index |
+| BigQuery `all_logs`                 | All project logs                   | 2 years          | BigQuery table expiry |
+| BigQuery `cloud_armor_lb_logs`      | Load balancer & WAF logs           | 2 years          | BigQuery table expiry |
+| BigQuery `frontend_error_logs`      | Frontend error logs                | 2 years          | BigQuery table expiry |
+| BigQuery `backend_error_logs`       | Backend error logs                 | 2 years          | BigQuery table expiry |
+| BigQuery `frontend_tracking_logs`   | Visitor tracking logs              | 2 years          | BigQuery table expiry |
+| Firestore `rate_limit_offenders` (DM-009) | Rate limit offender records  | 90 days (no active ban) | Scheduled cleanup |
+
+**Privacy Compliance**:
+
 - THE SYSTEM SHALL comply with applicable data protection regulations (GDPR if EU visitors are expected).
-- THE SYSTEM SHALL include a privacy notice or link on the website.
-- Tracking and error report data SHALL have TTL-based auto-expiry.
+- THE SYSTEM SHALL include a privacy policy page on the website (see FE-PAGE-009 in [02-frontend-specifications.md](02-frontend-specifications.md)) that clearly discloses:
+  - What data is collected and how it is anonymized
+  - The purpose of data collection
+  - Retention periods for all data stores (Firestore and BigQuery)
+  - That anonymized data is exported to BigQuery for long-term analytics (up to 2 years)
+  - That analytics dashboards (Looker Studio) are owner-operated and not publicly accessible
+  - User rights (right to request information or deletion)
+- THE SYSTEM SHALL link the privacy policy from the site footer on all pages.
+- Tracking and error report data SHALL have TTL-based auto-expiry in Firestore.
+- BigQuery data SHALL be automatically deleted after 2 years via dataset-level table expiry (see INFRA-010).
+- THE SYSTEM SHALL NOT share any collected data with third parties.
 
 ---
 

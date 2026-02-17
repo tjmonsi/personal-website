@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 1.6
+version: 1.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -373,7 +373,7 @@ ENTRYPOINT ["/server"]
 | -------------------- | ---------------------------------- |
 | Dataset name         | `website_logs`                     |
 | Region               | `asia-southeast1`                  |
-| Default table expiry | None (retained indefinitely)       |
+| Default table expiry | 730 days (2 years)                 |
 
 **Log Sinks**:
 
@@ -438,10 +438,33 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
   - `resource` — resource metadata (type, labels)
   - `httpRequest` — HTTP request details (for load balancer logs)
 
+**Data Retention**:
+
+- All tables in the `website_logs` dataset SHALL have a default table expiry of **730 days (2 years)**. Data older than 2 years is automatically deleted by BigQuery.
+- This 2-year retention applies uniformly to all 5 tables. No table retains data indefinitely.
+- The retention period balances long-term trend analysis with privacy obligations and cost management.
+
+**Data Anonymization in BigQuery**:
+
+- IP addresses exported to BigQuery via Cloud Logging log sinks are the same values logged by the Go backend. The Go backend SHALL truncate IPv4 addresses (zero the last octet, e.g., `203.0.113.0`) and truncate IPv6 addresses (zero the last 80 bits) **before** writing log entries. This ensures that no full IP addresses are stored in BigQuery.
+- User-Agent strings exported to BigQuery contain browser name and version only (as sent by the frontend in the `POST /t` request body). Raw `User-Agent` headers from `httpRequest` fields in load balancer logs (`cloud_armor_lb_logs`) are retained as-is since they do not contain personally identifiable information beyond general browser/OS info.
+- No cookies, user accounts, session identifiers, or device fingerprints are present in any BigQuery table.
+- The `frontend_tracking_logs` and `frontend_error_logs` tables contain only the structured fields emitted by the Go backend when processing `POST /t` requests (see OBS-001, OBS-002, OBS-003 in [07-observability-specifications.md](07-observability-specifications.md)).
+
+**Summary of Data Stored in BigQuery**:
+
+| Table                     | Personal Data Present                         | Anonymization Applied                  | Retention |
+| ------------------------- | --------------------------------------------- | -------------------------------------- | --------- |
+| `all_logs`                | Truncated IP addresses                        | IP last octet zeroed                   | 2 years   |
+| `cloud_armor_lb_logs`     | Truncated IP, User-Agent (browser/OS info)    | IP last octet zeroed by Cloud Armor config | 2 years |
+| `frontend_error_logs`     | Truncated IP, browser name/version            | IP last octet zeroed                   | 2 years   |
+| `backend_error_logs`      | Truncated IP (in request context)             | IP last octet zeroed                   | 2 years   |
+| `frontend_tracking_logs`  | Truncated IP, browser, referrer, page visited | IP last octet zeroed                   | 2 years   |
+
 **Notes**:
 - Log sinks operate independently of the existing Cloud Logging log buckets and the rate-limit log sink (INFRA-008c). They do not interfere with each other.
 - BigQuery tables are partitioned by ingestion time automatically when created by log sinks.
-- For cost optimization, consider setting a table expiry on `all_logs` if long-term retention of all logs is not required.
+- The 2-year table expiry is set at the dataset level as the default. Individual tables inherit this expiry unless explicitly overridden (which SHALL NOT be done).
 
 ---
 
