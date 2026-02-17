@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 2.2
+version: 2.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -103,11 +103,30 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o server .
 
+# Create non-root user 'jack' in builder (distroless has no shell/useradd)
+RUN addgroup -S jack && adduser -S -G jack -u 10001 jack
+
 FROM gcr.io/distroless/static-debian12
+
+# Copy passwd/group so the runtime knows about 'jack'
+COPY --from=builder /etc/passwd /etc/passwd
+COPY --from=builder /etc/group /etc/group
+
 COPY --from=builder /app/server /server
+
+# Run as non-root user 'jack' — no root credentials or privileges
+USER jack:jack
+
 EXPOSE 8080
 ENTRYPOINT ["/server"]
 ```
+
+**Container Security**:
+
+- The container SHALL run as the non-root user `jack` (UID 10001). Root credentials and privileges are not present at runtime.
+- The `gcr.io/distroless/static-debian12` base image contains no shell, package manager, or unnecessary binaries — reducing the attack surface.
+- The `USER jack:jack` directive ensures the process cannot escalate to root.
+- Cloud Run SHALL be configured with `--no-allow-unauthenticated` for internal endpoints and `run.googleapis.com/container-security-context: {"runAsNonRoot": true}` annotation where supported.
 
 **Health Check**: `GET /health` (returns `200` with `{"status": "ok"}`)
 
