@@ -1,6 +1,6 @@
 ---
 title: Draft Cost Estimate — GCP Monthly Costs
-version: 0.8-draft
+version: 0.9-draft
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -24,6 +24,11 @@ This document provides a rough cost estimate for running the personal website in
 - [Vertex AI Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 - [Firestore Native Pricing](https://cloud.google.com/firestore/pricing)
 ---
+
+### Changes from v0.9-draft
+
+- **Cloud Storage (Media)**: Added `<project-id>-media-bucket` line items to both scenario tables and cost summary (INFRA-019, CLR-104). Cost: $0.00 (< 100 MB images, within 5 GB free tier).
+- **Cloud Storage (Terraform state)**: Renamed bucket from `<project-id>-tfstate` to `<project-id>-terraform-state` (Additional Note 1).
 
 ### Changes from v0.8-draft
 
@@ -140,6 +145,7 @@ This document provides a rough cost estimate for running the personal website in
 | | **Cloud Functions (Gen 2) Subtotal** | | | **$0.00** |
 | **Cloud Scheduler** | Jobs | 3 (sitemap generation, offender cleanup, embedding sync safety net) | Free tier: 3 jobs | $0.00 |
 | **Cloud Storage** | Terraform state bucket | < 1 MB (state files + versions) | Free tier: 5 GB | $0.00 |
+| | Media bucket (images) | < 100 MB (article images) | Free tier: 5 GB | $0.00 |
 | **Artifact Registry** | Docker images | < 500 MB (Go binary in distroless image, ~10 versions) | Free tier: 500 MB | $0.00 |
 | **Cloud Logging** | Log ingestion | < 50 GiB/month | Free tier: 50 GiB/month | $0.00 |
 | **Cloud Monitoring** | Metrics | Basic metrics | Free tier covers | $0.00 |
@@ -216,6 +222,7 @@ This document provides a rough cost estimate for running the personal website in
 | | **Cloud Functions (Gen 2) Subtotal** | | | **$0.00** |
 | **Cloud Scheduler** | Jobs | 3 | Free tier | $0.00 |
 | **Cloud Storage** | Terraform state bucket | < 1 MB | Free tier: 5 GB | $0.00 |
+| | Media bucket (images) | < 100 MB | Free tier: 5 GB | $0.00 |
 | **Artifact Registry** | Docker images | < 500 MB | Free tier: 500 MB | $0.00 |
 | **Cloud Logging** | Log ingestion | ~5 GiB | Free tier: 50 GiB | $0.00 |
 | **Cloud DNS** | Zone + queries | 1 zone, ~600K queries | $0.20 + $0.24 | $0.44 |
@@ -240,7 +247,7 @@ This document provides a rough cost estimate for running the personal website in
 | Firebase Hosting + Functions | $0.00 | $0.00 | Within free tier for both scenarios |
 | Cloud Functions (Gen 2) | $0.00 | $0.00 | 4 functions, all within free tier |
 | Cloud Scheduler | $0.00 | $0.00 | Within free tier (3 jobs, 3 free allowed) |
-| Cloud Storage (Terraform state) | $0.00 | $0.00 | < 1 MB state files, within 5 GB free tier |
+| Cloud Storage (Terraform state + Media) | $0.00 | $0.00 | < 1 MB state files + < 100 MB images, within 5 GB free tier |
 | Artifact Registry | $0.00 | $0.00 | < 500 MB Docker images, within free tier |
 | Cloud DNS | $0.20 | $0.44 | Minimal |
 | Cloud Logging/Monitoring | $0.00 | $0.00 | Within free tier (alerting, SLI/SLO monitoring included) |

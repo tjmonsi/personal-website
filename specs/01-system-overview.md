@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.8
+version: 2.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -32,6 +32,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Messaging      | Google Cloud Pub/Sub                   | Google Cloud (asia-southeast1)           |
 | DNS            | Google Cloud DNS                       | Google Cloud                             |
 | Container Registry | Google Artifact Registry           | Google Cloud (asia-southeast1)           |
+| Media Storage    | Google Cloud Storage                 | Google Cloud (asia-southeast1)           |
 | Observability  | Google Cloud Logging + Cloud Monitoring + BigQuery | Google Cloud                |
 | Analytics      | Looker Studio                          | Google Cloud (owner-operated)            |
 | IaC            | Terraform (HashiCorp)                  | This repository (`/terraform/`)          |
@@ -240,3 +241,14 @@ Content (articles, front page, social links, external references) is managed thr
 > **Note**: Only two environments are maintained. The Development environment is **local-only** — it runs entirely on the developer's machine using emulators and local databases. No GCP resources are provisioned or deployed for Development. The `dev` branch is used for local development and testing; code is merged to `main` for Production deployment. The owner can deploy immediately, so no separate staging GCP project is needed.
 
 > **Note on VPC**: The Production environment uses a VPC with Direct VPC Egress (INFRA-009). Since the Development environment is local-only, VPC configuration is not applicable to Development. References to "Development does not use a VPC" in other specs reflect the local-only nature of the Dev environment — there are no GCP services in Dev that would require a VPC.
+
+---
+
+### Acceptance Criteria
+
+- **AC-SYS-001**: Given the production deployment, when the system is fully provisioned, then all components listed in the Technology Stack table are deployed and operational in `asia-southeast1`.
+- **AC-SYS-002**: Given the architecture, when a user visits `tjmonsi.com`, then traffic routes through the Load Balancer → Cloud Armor → Firebase Hosting/Functions → Nuxt 4 SPA.
+- **AC-SYS-003**: Given the architecture, when the frontend calls `api.tjmonsi.com`, then traffic routes through the Load Balancer → Cloud Armor → Cloud Run (Go backend).
+- **AC-SYS-004**: Given the deployment topology, when the system is running, then the frontend and backend operate on separate subdomains (`tjmonsi.com` and `api.tjmonsi.com`).
+- **AC-SYS-005**: Given the two-environment strategy, when developing locally, then all services (database, functions) run via emulators without requiring GCP resources.
+- **AC-SYS-006**: Given the IaC approach, when infrastructure changes are needed, then all GCP resources (except manually bootstrapped ones) are managed via Terraform.

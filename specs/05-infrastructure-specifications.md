@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 3.1
+version: 3.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -646,7 +646,7 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
 
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
-| Bucket name          | `<project-id>-tfstate`                             |
+| Bucket name          | `<project-id>-terraform-state`                     |
 | Region               | `asia-southeast1`                                  |
 | Storage class        | Standard                                           |
 | Versioning           | Enabled (allows state rollback)                    |
@@ -663,7 +663,7 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
 **Notes**:
 - The bucket stores only Terraform state (`.tfstate`) and lock files. Expected size: < 1 MB.
 - Versioning is critical for state recovery in case of corruption or accidental overwrites. GCS versioning keeps all prior versions of state files.
-- The bucket name uses the convention `<project-id>-tfstate` for easy identification. Replace `<project-id>` with the actual project ID.
+- The bucket name uses the convention `<project-id>-terraform-state` for easy identification. Replace `<project-id>` with the actual project ID.
 - No other service or user should have write access to this bucket to prevent state corruption.
 
 ---
@@ -678,7 +678,7 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
 | -------------------- | -------------------------------------------------- |
 | Tool                 | Terraform (HashiCorp)                              |
 | Config location      | This repository: `/terraform/` directory           |
-| Remote backend       | GCS bucket `<project-id>-tfstate` (INFRA-015)      |
+| Remote backend       | GCS bucket `<project-id>-terraform-state` (INFRA-015)      |
 | State locking        | GCS-based (built-in with GCS backend)              |
 | Service account      | `terraform-builder@<project-id>.iam.gserviceaccount.com` (SEC-012) |
 | Provisioning (SA)    | **Manual** (service account created by the project owner) |
@@ -688,7 +688,7 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
 ```hcl
 terraform {
   backend "gcs" {
-    bucket = "<project-id>-tfstate"
+    bucket = "<project-id>-terraform-state"
     prefix = "terraform/state"
   }
 }
@@ -818,6 +818,35 @@ Terraform and the Application CI/CD pipeline have complementary but distinct res
 - Artifact Registry is the recommended container registry for GCP. Container Registry (`gcr.io`) is deprecated.
 - Expected storage: < 500 MB (small Go binary in distroless image). Within Artifact Registry's 500 MB free tier.
 - The cleanup policy prevents unbounded storage growth from old image versions.
+
+---
+
+#### INFRA-019: Cloud Storage Media Bucket
+
+**Purpose**: Store media assets (images) referenced by article markdown content. The Go backend proxies images from this bucket via `GET /images/{path}` (BE-API-013), enabling article markdown to reference images as `https://api.tjmonsi.com/images/...` while keeping the frontend CSP `img-src` restrictive (CLR-104).
+
+**Configuration**:
+
+| Setting              | Value                              |
+| -------------------- | ---------------------------------- |
+| Bucket name          | `<project-id>-media-bucket`        |
+| Location             | `asia-southeast1`                  |
+| Storage class        | Standard                           |
+| Access control       | Uniform (no per-object ACLs)       |
+| Public access        | Not public (accessed only via Go backend) |
+| Versioning           | Disabled                           |
+
+**Access Control**:
+
+- The Cloud Run API service account (`cloud-run-api@<project-id>.iam.gserviceaccount.com`) SHALL have `roles/storage.objectViewer` on this bucket (SEC-013).
+- No public access is granted. All image access is proxied through the Go backend's `GET /images/{path}` endpoint.
+- Image uploads are managed by the website owner directly (via `gsutil`, Cloud Console, or a future content pipeline). No upload endpoint is exposed in the API.
+
+**Notes**:
+
+- Expected storage: < 100 MB (a small personal website with limited images). Well within Cloud Storage's 5 GB free tier.
+- The Go backend caches images in memory for 30 days to reduce Cloud Storage read operations (see BE-API-013).
+- Terraform manages the bucket resource (INFRA-016).
 
 ---
 
@@ -1112,7 +1141,22 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
                            ▼
               ┌──────────────────────────────────┐
               │   Cloud Storage                  │
-              │   <project-id>-tfstate           │
+              │   <project-id>-terraform-state  │
               │   (manually created)             │
               └──────────────────────────────────┘
 ```
+
+---
+
+### Acceptance Criteria
+
+- **AC-INFRA-001**: Given the Cloud Run service (INFRA-003), when deployed, then it runs with 1 vCPU, 1 GB RAM, min instances = 0, max instances = 5, and scale-to-zero is functional.
+- **AC-INFRA-002**: Given the Load Balancer (INFRA-004), when configured, then `api.tjmonsi.com/*` routes to Cloud Run and `tjmonsi.com/*` routes to Firebase Hosting/Functions.
+- **AC-INFRA-003**: Given Cloud Armor (INFRA-005), when a client exceeds 60 requests per minute, then the client receives HTTP `429` with a `Retry-After` header.
+- **AC-INFRA-004**: Given the Firestore Enterprise database (INFRA-006), when accessed from the Go backend, then the MongoDB wire protocol connection succeeds via the MongoDB Go driver.
+- **AC-INFRA-005**: Given the VPC (INFRA-009), when Cloud Run sends egress traffic, then Direct VPC Egress routes traffic through the VPC without a Serverless VPC Access Connector.
+- **AC-INFRA-006**: Given the BigQuery dataset (INFRA-010), when log sinks are active, then logs are routed to the correct tables (`all_logs`, `cloud_armor_lb_logs`, `frontend_tracking_logs`, `frontend_error_logs`, `backend_error_logs`).
+- **AC-INFRA-007**: Given the Terraform state bucket (INFRA-015), when Terraform runs, then state is stored in `<project-id>-terraform-state` with versioning enabled.
+- **AC-INFRA-008**: Given DNS (INFRA-017), when `tjmonsi.com` and `api.tjmonsi.com` are resolved, then they point to the Load Balancer's IPv4 and IPv6 addresses.
+- **AC-INFRA-009**: Given the Cloud Storage media bucket (INFRA-019), when the Go backend requests an image via `GET /images/{path}`, then the Cloud Run SA has `roles/storage.objectViewer` and can read the object.
+- **AC-INFRA-010**: Given Firebase Hosting (INFRA-001), when static assets are deployed, then CSS/JS files are served with appropriate cache headers from the Firebase CDN.

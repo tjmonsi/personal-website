@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 2.8
+version: 2.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -176,7 +176,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
   - Using string transformation functions
   - Embedding within compiled/minified code
 - The frontend generates a short-lived JWT (5-minute expiry) signed with the static secret using HMAC-SHA256.
-- The JWT is sent as `Authorization: Bearer <token>` on each `POST /t` request.
+- The JWT is included in the JSON request body as a `token` field on each `POST /t` request. This approach enables the use of `navigator.sendBeacon()`, which does not support custom HTTP headers such as `Authorization` (CLR-103).
 
 **JWT Claims**:
 
@@ -190,12 +190,13 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 **Backend Validation**:
 
+- THE SYSTEM SHALL extract the `token` field from the JSON request body.
 - THE SYSTEM SHALL verify the JWT signature using the shared secret (stored as an environment variable).
 - THE SYSTEM SHALL verify `iss` matches the expected client ID.
 - THE SYSTEM SHALL verify `exp` has not passed (token not expired).
 - THE SYSTEM SHALL verify `iat` is not in the future.
 - THE SYSTEM SHALL allow a clock skew tolerance of **60 seconds** when validating `exp` and `iat` claims, to accommodate minor clock drift between the client's device and the server.
-- IF any validation fails, THE SYSTEM SHALL return HTTP `403 Forbidden`.
+- IF the `token` field is missing, empty, or validation fails, THE SYSTEM SHALL return HTTP `403 Forbidden`.
 
 **Security Considerations**:
 
@@ -246,7 +247,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | Header                         | Value                                                     |
 | ------------------------------ | --------------------------------------------------------- |
-| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data:; font-src 'self'` |
+| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'` |
 | `X-Content-Type-Options`       | `nosniff`                                                 |
 | `X-Frame-Options`              | `DENY`                                                    |
 | `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`                     |
@@ -271,7 +272,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
           { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
           { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
           { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data:; font-src 'self'" }
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'" }
         ]
       }
     ]
@@ -286,7 +287,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - THE SYSTEM SHALL configure CORS headers since the frontend (`tjmonsi.com`) and backend (`api.tjmonsi.com`) are on different origins.
 - Allowed origin: `https://tjmonsi.com` (and development environment equivalents)
 - Allowed methods: `GET, POST, OPTIONS`
-- Allowed headers: `Content-Type, Accept, Authorization, If-None-Match, If-Modified-Since`
+- Allowed headers: `Content-Type, Accept, If-None-Match, If-Modified-Since`
 - Exposed headers: `ETag, X-Request-ID` (via `Access-Control-Expose-Headers`)
 - Max age: `86400` (1 day)
 - `OPTIONS` preflight requests SHALL return the CORS headers and SHALL NOT be subject to application-level ban checks. Cloud Armor rate limiting applies to all HTTP methods; CORS preflight caching (`max-age: 86400`) makes this negligible in practice.
@@ -492,7 +493,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | # | Service Account Email | Name | Purpose | Key IAM Roles | Scope | Managed By |
 |---|----------------------|------|---------|---------------|-------|------------|
-| 1 | `cloud-run-api@<project-id>.iam.gserviceaccount.com` | Cloud Run API SA | Identity for the Go backend API (INFRA-003) | `roles/datastore.viewer` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI), Firestore Enterprise access (MongoDB wire protocol, via project-level role or custom role) | Project / specific resources | Terraform |
+| 1 | `cloud-run-api@<project-id>.iam.gserviceaccount.com` | Cloud Run API SA | Identity for the Go backend API (INFRA-003) | `roles/datastore.viewer` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI), `roles/storage.objectViewer` (media bucket `<project-id>-media-bucket`, INFRA-019), Firestore Enterprise access (MongoDB wire protocol, via project-level role or custom role) | Project / specific resources | Terraform |
 | 2 | `cf-sitemap-gen@<project-id>.iam.gserviceaccount.com` | Sitemap Generator SA | Identity for the `generate-sitemap` Cloud Function (INFRA-008a) | Firestore Enterprise read (article collections: `technical_articles`, `blog_articles`) + read/write (`sitemap` collection) | INFRA-008a function | Terraform |
 | 3 | `cf-rate-limit-proc@<project-id>.iam.gserviceaccount.com` | Rate Limit Log Processor SA | Identity for the `process-rate-limit-logs` Cloud Function (INFRA-008c) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008c function | Terraform |
 | 4 | `cf-offender-cleanup@<project-id>.iam.gserviceaccount.com` | Offender Cleanup SA | Identity for the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008d function | Terraform |
@@ -514,3 +515,18 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 > **Exception**: Firebase Functions (INFRA-002) uses the Firebase default service account because it only serves static HTML content and does not access any GCP resources. The default SA is acceptable for this component since it has no meaningful permissions to abuse.
 
 > **Note**: The exact IAM roles for the Cloud Run SA (#1) regarding Firestore Enterprise access will be finalized during implementation, depending on how the MongoDB wire protocol authentication is configured. At minimum, the SA needs credentials or IAM-based access to the Firestore Enterprise MongoDB endpoint.
+
+---
+
+### Acceptance Criteria
+
+- **AC-SEC-001**: Given a `POST /t` request with a valid JWT `token` in the body, when the backend validates it, then signature, `iss`, `exp`, and `iat` are verified and the request is processed.
+- **AC-SEC-002**: Given a `POST /t` request with a missing `token` field, when the backend processes it, then the response is `403 Forbidden`.
+- **AC-SEC-003**: Given a client exceeding rate limits, when progressive banning is enforced, then responses escalate from `429` → `403` → `404` based on offense tier.
+- **AC-SEC-004**: Given the frontend CSP, when a page loads, then `img-src` allows `'self' data: https://api.tjmonsi.com` and blocks all other image origins.
+- **AC-SEC-005**: Given CORS configuration, when the frontend (`tjmonsi.com`) sends a cross-origin request to `api.tjmonsi.com`, then the backend returns appropriate CORS headers with allowed origin, methods, and headers (excluding `Authorization`).
+- **AC-SEC-006**: Given the backend API, when any response is sent, then security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security`, `Referrer-Policy`, `Permissions-Policy`) are present.
+- **AC-SEC-007**: Given IP address processing, when the Go backend handles a request, then the IP is truncated (last octet zeroed for IPv4, last 80 bits zeroed for IPv6) before logging.
+- **AC-SEC-008**: Given any service account in the system, when its IAM roles are reviewed, then no SA has `roles/owner` or `roles/editor`.
+- **AC-SEC-009**: Given the Cloud Run container, when it runs, then it executes as non-root user `jack` (UID 10001) on a distroless base image.
+- **AC-SEC-010**: Given a CORS preflight `OPTIONS` request, when the backend processes it, then it returns CORS headers and is not subject to application-level ban checks.

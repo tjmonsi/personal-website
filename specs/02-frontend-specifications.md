@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.9
+version: 2.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -32,7 +32,7 @@ tags: [frontend, nuxt4, vue3, spa]
 | Heading Slug     | A URL-safe string derived from heading text by converting to lowercase, replacing spaces with hyphens, and removing special characters (e.g., "My Section Title" → `my-section-title`) |
 | `visitor_session_id` | A random UUID v4 generated per browser session, stored in `sessionStorage`. Used to correlate tracking events within a single visit. Not linked to any real-world identity and not persisted across sessions. |
 | `visitor_id`     | A SHA-256 hash computed server-side from `visitor_session_id` + truncated IP + User-Agent. A non-reversible, session-scoped identifier for unique visitor counting and bot discrimination. |
-| Link Click Tracking | Fire-and-forget anonymous tracking of anchor element clicks, sent via `navigator.sendBeacon()` to `POST /t`. |
+| Link Click Tracking | Fire-and-forget anonymous tracking of anchor element clicks, sent via `navigator.sendBeacon()` (with `fetch()` + `keepalive: true` fallback) to `POST /t`. |
 | Time-on-Page Milestone | An engagement signal sent when a user remains on a page for 1, 2, or 5 minutes of active foreground time. Only foreground time counts (uses Page Visibility API). |
 
 ---
@@ -117,6 +117,11 @@ tags: [frontend, nuxt4, vue3, spa]
   - Default state: collapsed
   - WHEN expanded, shows version history entries with date and description
 - THE SYSTEM SHALL render the markdown article body.
+- **Image Constraints** (CLR-104):
+  - Articles SHALL NOT contain external image references except for images hosted on `tjmonsi.com` or `api.tjmonsi.com`.
+  - Images in articles are limited to: inline `data:` URIs, images hosted on the frontend domain (`tjmonsi.com`), or images served via the backend image proxy endpoint (`https://api.tjmonsi.com/images/{path}`, see BE-API-013).
+  - In markdown, article images SHALL use the format: `![alt text](https://api.tjmonsi.com/images/path/to/image.png)`.
+  - The frontend CSP `img-src` directive restricts image loading to `'self' data: https://api.tjmonsi.com` (SEC-005).
 - **Heading Anchors**:
   - THE SYSTEM SHALL generate an `id` attribute for each rendered heading (H2, H3, H4) using a heading slug derived from the heading text (lowercase, spaces replaced with hyphens, special characters removed).
   - IF duplicate heading slugs exist within the same article, THE SYSTEM SHALL append a numeric suffix (e.g., `my-heading`, `my-heading-1`, `my-heading-2`).
@@ -284,6 +289,21 @@ tags: [frontend, nuxt4, vue3, spa]
 
 ---
 
+#### FE-PAGE-010: Changelog (`/changelog`)
+
+**Description**: Static page displaying a human-readable changelog of frontend updates. Linked from the service worker update snackbar (FE-COMP-008) so users can review what changed before refreshing.
+
+**Requirements**:
+
+- WHEN the user visits `/changelog`, THE SYSTEM SHALL display a chronological list of frontend-only changes (most recent first).
+- THE SYSTEM SHALL hardcode the changelog content in the frontend (no backend endpoint needed).
+- Each changelog entry SHALL include:
+  - A version identifier or date
+  - A brief description of changes
+- THE SYSTEM SHALL display a "Last updated" date at the top of the page.
+
+---
+
 ### Global Components and Behaviors
 
 #### FE-COMP-001: Search Bar
@@ -328,7 +348,7 @@ tags: [frontend, nuxt4, vue3, spa]
 | 504         | "TJ has been notified about the server taking too long." + randomized funny message (see below)  |
 | Other       | "Something went wrong. TJ has been notified of this issue."                                      |
 
-- Snackbar SHALL auto-dismiss after 5 seconds or be manually dismissable.
+- Snackbar SHALL auto-dismiss after 10 seconds or be manually dismissable.
 
 **504 Timeout Funny Messages**:
 
@@ -352,11 +372,17 @@ tags: [frontend, nuxt4, vue3, spa]
 **Requirements**:
 
 - WHEN a user visits any page, THE SYSTEM SHALL send anonymous tracking data to the backend via `POST /t`.
-- THE SYSTEM SHALL authenticate the request using a Bearer Token (JWT).
+- THE SYSTEM SHALL authenticate the request using a JWT included in the request body.
   - A static ID and static secret SHALL be embedded in the frontend code.
   - These credentials SHALL be obfuscated in the frontend bundle.
-  - THE SYSTEM SHALL generate a JWT from these credentials to be sent as `Authorization: Bearer <token>` on each `POST /t` request.
+  - THE SYSTEM SHALL generate a short-lived JWT (5-minute expiry) from these credentials to be included as a `token` field in the JSON request body on each `POST /t` request (CLR-103).
   - The JWT SHALL include claims that identify the request as originating from the legitimate frontend.
+
+**Delivery Mechanism**:
+
+- THE SYSTEM SHALL use `navigator.sendBeacon()` as the primary delivery method for all `POST /t` requests. The request body SHALL be sent as a JSON `Blob` with `Content-Type: application/json`, including the `token` field.
+- IF `navigator.sendBeacon()` is not available (e.g., in very old browsers), THE SYSTEM SHALL fall back to `fetch()` with `keepalive: true` as the delivery method.
+- This progressive fallback ensures reliable delivery during page unload events while maintaining broad browser compatibility.
 
 **Visitor Session ID**:
 
@@ -388,7 +414,7 @@ tags: [frontend, nuxt4, vue3, spa]
   - `browser`: Browser name and version
   - `connection_speed`: Connection speed info (if available)
 - THE SYSTEM SHALL use event delegation (a single listener on a common ancestor) rather than attaching individual listeners to every anchor element.
-- THE SYSTEM SHALL NOT block or delay the navigation. The tracking request SHALL be sent asynchronously (fire-and-forget via `navigator.sendBeacon()` or a non-blocking `fetch`).
+- THE SYSTEM SHALL NOT block or delay the navigation. The tracking request SHALL be sent asynchronously (fire-and-forget via `navigator.sendBeacon()` with `fetch()` + `keepalive: true` fallback; see Delivery Mechanism above).
 - THE SYSTEM SHALL NOT track clicks on the same-page anchor links (hash-only links like `#section`) as they are already covered by hash fragment navigation.
 
 **Time-on-Page Tracking**:
@@ -405,7 +431,7 @@ tags: [frontend, nuxt4, vue3, spa]
 - THE SYSTEM SHALL clear all pending timers when the user navigates away from the page (SPA route change or `beforeunload`).
 - THE SYSTEM SHALL only fire each milestone once per page visit. If the user navigates away and returns to the same page, the timer resets.
 - THE SYSTEM SHALL pause the timer when the page is not visible (using the Page Visibility API `document.visibilityState`) and resume when the page becomes visible again. Only active foreground time counts toward milestones.
-- THE SYSTEM SHALL use `navigator.sendBeacon()` as the preferred method for sending milestone events, as it is reliable even during page unload.
+- THE SYSTEM SHALL use `navigator.sendBeacon()` as the preferred method for sending milestone events (with `fetch()` + `keepalive: true` fallback; see Delivery Mechanism above), as it is reliable even during page unload.
 
 **General Tracking Rules**:
 
@@ -419,7 +445,7 @@ tags: [frontend, nuxt4, vue3, spa]
 **Requirements**:
 
 - WHEN a network error or slow loading occurs, THE SYSTEM SHALL send error data to the backend via `POST /t`.
-- THE SYSTEM SHALL use the same JWT authentication mechanism as FE-COMP-004.
+- THE SYSTEM SHALL use the same JWT body-based authentication mechanism as FE-COMP-004 (including the `token` field in each request body).
 - Error payload (JSON body, sent to the same `POST /t` endpoint with `action: "error_report"`) SHALL include:
   - `action`: `"error_report"`
   - `visitor_session_id`: The session-scoped UUID v4 from `sessionStorage` (same as FE-COMP-004)
@@ -484,6 +510,17 @@ tags: [frontend, nuxt4, vue3, spa]
     - IF the backend returns `200` with updated content, THE SYSTEM SHALL update the cache and optionally notify the user that newer content is available.
   - IF the device is offline and no cached content exists, THE SYSTEM SHALL display a message indicating the article is not available offline.
 
+**Service Worker Update Notification**:
+
+- WHEN a new version of the service worker is detected (e.g., after a frontend deployment), THE SYSTEM SHALL display an update snackbar informing the user that a new version of the website is available.
+- The update snackbar SHALL include:
+  - A message: "A new version of the website is available."
+  - A link to the changelog page (`/changelog`, see FE-PAGE-010) so the user can review what changed.
+  - A "Refresh now" button that activates the new service worker and reloads the page.
+  - A manual dismiss button.
+- The update snackbar SHALL auto-dismiss after **20 seconds** if the user does not interact with it. This is longer than the default 10-second snackbar duration to give the user time to read the update information.
+- IF the user dismisses the snackbar without refreshing, the new service worker SHALL be activated on the next full page load or navigation.
+
 ---
 
 #### FE-COMP-009: Empty Search Results Handling
@@ -523,9 +560,15 @@ tags: [frontend, nuxt4, vue3, spa]
 
 - THE SYSTEM SHALL display a global site footer on all pages.
 - THE SYSTEM SHALL include the following elements in the footer:
-  - A link to the privacy policy page (`/privacy`) (see FE-PAGE-009).
+  - Navigation links to all main pages (same links as the header navigation, FE-COMP-012):
+    - Home (`/`)
+    - Technical Blog (`/technical`)
+    - Opinions (`/blog`)
+    - Other Links (`/socials`)
+    - Notable Notes Outside (`/others`)
+    - Privacy (`/privacy`)
+    - Changelog (`/changelog`)
   - A copyright notice: `© TJ Monserrat`.
-  - A link to the socials page (`/socials`).
 - THE SYSTEM SHALL render the footer consistently across desktop, tablet, and mobile viewports.
 
 ---
@@ -560,9 +603,34 @@ tags: [frontend, nuxt4, vue3, spa]
 
 ---
 
+#### FE-COMP-012: Site Header Navigation
+
+**Requirements**:
+
+- THE SYSTEM SHALL display a global site header on all pages.
+- THE SYSTEM SHALL include navigation links to all main pages:
+  - Home (`/`)
+  - Technical Blog (`/technical`)
+  - Opinions (`/blog`)
+  - Other Links (`/socials`)
+  - Notable Notes Outside (`/others`)
+  - Privacy (`/privacy`)
+  - Changelog (`/changelog`)
+- **Desktop**: THE SYSTEM SHALL display all navigation links horizontally in the header.
+- **Mobile**:
+  - THE SYSTEM SHALL display a hamburger menu icon on the left side of the header.
+  - WHEN the user taps the hamburger icon, THE SYSTEM SHALL open a navigation drawer that slides in from the left side of the screen.
+  - The navigation drawer SHALL contain all the same navigation links as the desktop header.
+  - THE SYSTEM SHALL close the navigation drawer when the user taps outside of it, taps a navigation link, or taps a close button.
+  - THE SYSTEM SHALL include a semi-transparent overlay behind the navigation drawer when it is open.
+- THE SYSTEM SHALL visually indicate the currently active page in the navigation.
+
+---
+
 ### Responsive Design
 
 - THE SYSTEM SHALL be responsive and functional on desktop, tablet, and mobile viewports.
+- Site header navigation (FE-COMP-012) SHALL collapse to a hamburger menu with a left-sliding navigation drawer on mobile.
 - Table of contents (FE-PAGE-003, FE-PAGE-005) SHALL collapse to a hamburger/dropdown on mobile.
 - Search bars and filters SHALL stack vertically on mobile.
 
@@ -572,3 +640,23 @@ tags: [frontend, nuxt4, vue3, spa]
 - All interactive elements SHALL be keyboard navigable.
 - All images SHALL have alt text.
 - Color contrast SHALL meet minimum requirements.
+
+---
+
+### Acceptance Criteria
+
+- **AC-FE-001**: Given a user visiting any page, when the page loads, then the site header navigation (FE-COMP-012) and site footer (FE-COMP-010) are visible with all navigation links.
+- **AC-FE-002**: Given a mobile viewport, when the user taps the hamburger icon, then a navigation drawer slides in from the left with all page links.
+- **AC-FE-003**: Given a user visiting `/technical` or `/blog`, when articles exist, then the list displays with title, abstract, offline indicator, and copy-link button.
+- **AC-FE-004**: Given a user on a desktop viewport viewing `/technical`, when there are multiple pages of results, then traditional pagination controls (Previous/Next) are displayed.
+- **AC-FE-005**: Given a user on a mobile viewport viewing `/technical`, when they scroll to the bottom, then additional articles load automatically via infinite scroll.
+- **AC-FE-006**: Given a user visiting `/technical/:slug.md`, when the article is loaded, then the YAML front matter is parsed and metadata, changelog, body, table of contents, and citation selector are rendered.
+- **AC-FE-007**: Given a rendered article with image references, when images use `https://api.tjmonsi.com/images/...` URLs, then images load successfully under the CSP `img-src` policy.
+- **AC-FE-008**: Given a user visiting any page, when the page loads, then a `page_view` tracking event is sent to `POST /t` with the JWT `token` in the request body via `navigator.sendBeacon()` (or `fetch` fallback).
+- **AC-FE-009**: Given a user clicking an anchor element, when the click event fires, then a `link_click` tracking event is sent asynchronously without blocking navigation.
+- **AC-FE-010**: Given a backend error response, when the response status is 429, then a snackbar displays "You're making too many requests..." and auto-dismisses after 10 seconds.
+- **AC-FE-011**: Given a previously visited article cached offline, when the user goes offline and navigates to that article, then the cached content is rendered.
+- **AC-FE-012**: Given a new service worker version is detected, when the user is on the site, then an update snackbar appears with a changelog link and refresh button, displayed for 20 seconds.
+- **AC-FE-013**: Given a user visiting `/changelog`, when the page loads, then a chronological list of frontend changes is displayed.
+- **AC-FE-014**: Given a user visiting `/privacy`, when the page loads, then the static privacy policy content is displayed with all required sections.
+- **AC-FE-015**: Given WCAG 2.1 Level AA requirements, when any page is audited, then all interactive elements are keyboard navigable and color contrast meets minimum requirements.

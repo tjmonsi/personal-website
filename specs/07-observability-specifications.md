@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 2.6
+version: 2.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -433,3 +433,15 @@ Terraform operations (`terraform plan`, `terraform apply`) are observable throug
 **Cost**: Cloud Monitoring SLO monitoring is free. No additional cost beyond the existing Cloud Monitoring free tier. See [Cloud Monitoring pricing](https://cloud.google.com/stackdriver/pricing).
 
 > **Note**: The 99.9% target is aspirational for a personal website with scale-to-zero Cloud Run. Cold starts will occasionally cause elevated latency but should not produce 5xx errors. The SLO primarily guards against persistent backend failures (e.g., misconfiguration, dependency outages).
+
+---
+
+### Acceptance Criteria
+
+- **AC-OBS-001**: Given the Go backend processes a `POST /t` with `action: "page_view"`, when the request is handled, then a structured log entry is emitted to stdout with `log_type: "frontend_tracking"` containing all tracking payload fields.
+- **AC-OBS-002**: Given a `POST /t` with `action: "error_report"`, when the request is handled, then a structured log entry is emitted with `log_type: "frontend_error"` routed to `frontend_error_logs` BigQuery table.
+- **AC-OBS-003**: Given the `robots.txt` file at `tjmonsi.com/robots.txt`, when crawled, then it includes `Sitemap: https://tjmonsi.com/sitemap.xml` and disallows `/t`.
+- **AC-OBS-004**: Given the Cloud Monitoring alerting (OBS-005), when email notification channels are configured, then alert policies fire on the defined conditions and send email notifications.
+- **AC-OBS-005**: Given the SLI/SLO (OBS-010), when the backend availability drops below 99.9% over the rolling 28-day window, then a fast-burn alert fires.
+- **AC-OBS-006**: Given the Looker Studio dashboard (OBS-009), when connected to BigQuery, then it displays unique visitors, page views, popular pages, referrer sources, and browser distribution from `frontend_tracking_logs`.
+- **AC-OBS-007**: Given the structured logging format, when any log entry is emitted by the Go backend, then it includes a `request_id` (UUID v4) for correlation.
