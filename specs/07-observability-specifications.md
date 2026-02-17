@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 1.4
+version: 1.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -42,11 +42,17 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
   "labels": {
     "masked_500": true
   },
+  "log_type": "frontend_tracking",
   "cloud_run_instance": "instance-abc123"
 }
 ```
 
 > **Note on `labels`**: The `labels` field is included only when applicable. When an internal server error is masked as a 404 response, the log entry MUST include `"masked_500": true` in the `labels` object. This label is used by OBS-005 alerting to detect masked 500 errors.
+
+> **Note on `log_type`**: The `log_type` field is included only for `POST /t` request log entries. It enables BigQuery log sink routing (INFRA-010) to separate frontend tracking and error logs into dedicated tables.
+> - `"frontend_tracking"` — for `POST /t` requests with `action: "page_view"` or other tracking actions.
+> - `"frontend_error"` — for `POST /t` requests with `action: "error_report"`.
+> - Omitted for all other requests (standard backend request logs).
 ```
 
 **Log Levels**:
@@ -62,6 +68,8 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 **Mandatory Logging Events**:
 
 - Every incoming request (INFO): method, path, status, latency
+- Every `POST /t` tracking request (INFO): include `log_type: "frontend_tracking"` and the tracking payload fields (page, referrer, action, browser, connection_speed) in the structured log entry
+- Every `POST /t` error report (INFO): include `log_type: "frontend_error"` and the error payload fields (error_type, error_message, page, browser, connection_speed) in the structured log entry
 - Rate limit triggered (WARNING): client identifier, endpoint, offense count
 - Rate limit ban applied (WARNING): client identifier, ban tier, expiry
 - Internal error masked as 404 (ERROR): full error details
@@ -227,13 +235,22 @@ const speedInfo = connection ? {
 - Database query latency by collection
 - Active rate limit bans
 
-**Analytics Dashboard** (built from tracking data):
+**Analytics Dashboard** (Looker Studio via BigQuery — see INFRA-010, INFRA-011):
 
-- Page views over time
+- Unique visitors (distinct IPs per time period)
+- Page views over time (total and per-page)
 - Top pages by visit count
-- Referrer sources
+- Referrer sources breakdown
 - Browser distribution
 - Geographic distribution (from IP)
+- Connection speed analysis
+- Frontend error trends (frequency, types, affected pages)
+- Error-browser correlation
+- Backend error trends and masked 500 tracking
+- Cloud Armor activity (rate limit blocks, WAF events)
+- Traffic patterns and request latency analysis
+
+**Data Flow**: Cloud Logging → BigQuery log sinks (5 tables) → Looker Studio data connector (service account) → Analytics dashboards.
 
 ---
 

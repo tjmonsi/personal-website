@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 1.5
+version: 1.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -25,7 +25,8 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | CDN / WAF      | Google Cloud Load Balancer + Cloud Armor | Google Cloud                           |
 | Networking     | VPC with Private Google Access         | Google Cloud (asia-southeast1)           |
 | Scheduling     | Google Cloud Scheduler                 | Google Cloud (asia-southeast1)           |
-| Observability  | Google Cloud Logging + Cloud Monitoring | Google Cloud                            |
+| Observability  | Google Cloud Logging + Cloud Monitoring + BigQuery | Google Cloud                |
+| Analytics      | Looker Studio                          | Google Cloud (owner-operated)            |
 
 ### Definitions
 
@@ -42,6 +43,9 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Cloud Armor Adaptive Protection | A Cloud Armor feature that uses machine learning to detect and mitigate L7 DDoS attacks automatically, providing escalating protection without manual rule configuration. |
 | VPC                             | Virtual Private Cloud — isolated network environment for Google Cloud resources |
 | Cloud Scheduler                 | Google Cloud's managed cron job service for scheduling periodic tasks |
+| BigQuery                        | Google Cloud's serverless data warehouse for SQL-based log analytics. Used here to store exported Cloud Logging logs for long-term querying and Looker Studio integration. |
+| Looker Studio                   | Google Cloud's business intelligence and data visualization tool. Used here as an owner-operated analytics dashboard connected to BigQuery via a service account. |
+| Log Sink (BigQuery)             | A Cloud Logging export mechanism that routes matching log entries to a BigQuery dataset for long-term storage and SQL querying. Five sinks route logs to dedicated tables. |
 
 ### High-Level Architecture
 
@@ -103,6 +107,18 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
                          │  │  (Go) → writes to DM-009   │  │
                          │  └────────────────────────────┘  │
                          └──────────────────────────────────┘
+
+              Cloud Logging (receives all service logs)
+                           │
+                           ▼ (5 Log Sinks → INFRA-010)
+              ┌──────────────────────────────────┐
+              │      BigQuery (website_logs)     │
+              └────────────────┬─────────────────┘
+                           │
+                           ▼
+              ┌──────────────────────────────────┐
+              │   Looker Studio (Analytics)      │
+              └──────────────────────────────────┘
 ```
 
 ### Key Architectural Decisions
@@ -124,6 +140,8 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 | AD-014 | Cloud Function for offense tracking from Cloud Armor logs | A log sink routes Cloud Armor rate-limit (429) events to a Cloud Function, which writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor's request-level rate limiting and the application's progressive banning logic. |
 | AD-015 | Cloud Armor Adaptive Protection enabled           | Cloud Armor's adaptive protection provides automatic, ML-based escalating DDoS mitigation. This complements application-level progressive banning with infrastructure-level protection that requires no manual rule updates. |
+| AD-016 | BigQuery log sinks for analytics                  | All Cloud Logging logs are exported to a BigQuery dataset (`website_logs`) via 5 dedicated log sinks — enabling SQL-based analytics, long-term retention, and Looker Studio dashboards without impacting operational logging. |
+| AD-017 | Looker Studio for analytics dashboards            | Owner-operated Looker Studio dashboards connect to BigQuery via a service account with read-only access, providing visitor analytics (unique visitors, page views, referrer sources, etc.) without third-party analytics tools. |
 
 ### Deployment Topology
 
@@ -134,6 +152,8 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 - **Cloud Run**: Min instances = 0 (scale to zero), Max instances = TBD based on budget
 - **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
 - **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink in `asia-southeast1`
+- **BigQuery**: Dataset `website_logs` in `asia-southeast1` with 5 tables fed by Cloud Logging log sinks (see INFRA-010)
+- **Looker Studio**: Owner-operated analytics dashboards connected to BigQuery via service account (see INFRA-011)
 - **Firebase Hosting**: Global CDN distribution for static assets
 - **Firebase Functions**: Serves the Nuxt 4 SPA shell
 - **Database**: Same region as Cloud Run (`asia-southeast1`) for low latency

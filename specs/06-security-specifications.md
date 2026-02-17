@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 1.4
+version: 1.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -21,6 +21,7 @@ tags: [security, rate-limiting, cors, authentication]
 | Brute-force API abuse         | Progressive rate limiting and banning                 | Application    |
 | Bot abuse                     | robots.txt, rate limiting, Cloud Armor bot management | Both           |
 | Unauthorized tracking abuse   | JWT bearer token authentication on POST /t            | Application    |
+| Analytics data exposure       | Least-privilege service account with read-only BigQuery access | Infrastructure |
 
 ---
 
@@ -303,3 +304,26 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - Frontend dependencies SHALL be audited with `npm audit` in CI/CD.
 - Docker base images SHALL use minimal, hardened images (distroless preferred).
 - Docker images SHALL be scanned for vulnerabilities before deployment.
+
+---
+
+### SEC-009: Looker Studio Service Account
+
+**Purpose**: Provide least-privilege read-only access for Looker Studio to query BigQuery analytics data (see INFRA-011 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)).
+
+**Service Account**: `looker-studio-reader@<project-id>.iam.gserviceaccount.com`
+
+**Granted Roles**:
+
+| Role                          | Scope                      | Purpose                                    |
+| ----------------------------- | -------------------------- | ------------------------------------------ |
+| `roles/bigquery.dataViewer`   | `website_logs` dataset     | Read-only access to all tables in dataset  |
+| `roles/bigquery.jobUser`      | Project                    | Required to execute BigQuery queries       |
+
+**Security Constraints**:
+
+- THE SYSTEM SHALL NOT grant the service account any write, delete, or admin permissions on BigQuery or any other Google Cloud resource.
+- THE SYSTEM SHALL NOT grant the service account access to Cloud Logging, Firestore, Cloud Run, or any other service beyond BigQuery.
+- The service account key (JSON) SHALL be stored securely by the website owner and NOT committed to any repository.
+- The service account key SHALL be rotated periodically (recommended: every 90 days).
+- IF the service account key is compromised, THE SYSTEM SHALL revoke the key immediately and generate a new one.
