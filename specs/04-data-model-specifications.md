@@ -101,8 +101,8 @@ Data models below use MongoDB-style field definitions, compatible with the Mongo
 | -------------- | -------- | -------- | ------------------------------------ |
 | `_id`          | string   | Yes      | Document identifier                  |
 | `platform`     | string   | Yes      | Platform name (e.g., "GitHub", "LinkedIn", "Twitter/X", "YouTube", "Mastodon", "Email") |
-| `url`          | string   | Yes      | Full URL to the profile or contact (e.g., `https://github.com/tjmonserrat` or `mailto:tj@example.com`) |
-| `display_name` | string   | Yes      | Display text shown to users (e.g., "@tjmonserrat") |
+| `url`          | string   | Yes      | Full URL to the profile or contact (e.g., `https://github.com/tjmonsi` or `mailto:tj@example.com`) |
+| `display_name` | string   | Yes      | Display text shown to users (e.g., "@tjmonsi") |
 | `icon`         | string   | No       | Icon identifier for the platform (e.g., `github`, `linkedin`, `twitter`, `youtube`, `mastodon`, `email`). Used by the frontend to render the appropriate icon. |
 | `sort_order`   | integer  | Yes      | Display order (ascending). Determines the order in which links appear on the socials page. |
 | `is_active`    | boolean  | Yes      | Whether the link is actively displayed. Allows hiding links without deleting them. Default: `true`. |

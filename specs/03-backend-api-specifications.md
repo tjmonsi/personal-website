@@ -274,14 +274,14 @@ All path parameters, validation rules, response format (including `text/markdown
   "items": [
     {
       "platform": "GitHub",
-      "url": "https://github.com/tjmonserrat",
-      "display_name": "@tjmonserrat",
+      "url": "https://github.com/tjmonsi",
+      "display_name": "@tjmonsi",
       "icon": "github",
       "sort_order": 1
     },
     {
       "platform": "LinkedIn",
-      "url": "https://linkedin.com/in/tjmonserrat",
+      "url": "https://linkedin.com/in/tjmonsi",
       "display_name": "TJ Monserrat",
       "icon": "linkedin",
       "sort_order": 2
@@ -317,7 +317,7 @@ All path parameters, validation rules, response format (including `text/markdown
       "tags": ["python", "colab"],
       "date_created": "2025-03-10T08:00:00Z",
       "date_updated": "2025-03-10T08:00:00Z",
-      "external_url": "https://github.com/tjmonserrat/project"
+      "external_url": "https://github.com/tjmonsi/project"
     }
   ],
   "pagination": {
@@ -377,7 +377,7 @@ All path parameters, validation rules, response format (including `text/markdown
 - THE SYSTEM SHALL allow a clock skew tolerance of **60 seconds** when validating `exp` and `iat` claims, to accommodate minor clock drift between client and server.
 - IF the JWT is missing, invalid, or expired, THE SYSTEM SHALL return HTTP `403 Forbidden`.
 - The JWT SHALL include the following claims:
-  - `iss`: Static client identifier (e.g., `"tjmonserrat-web"`)
+  - `iss`: Static client identifier (e.g., `"tjmonsi-web"`)
   - `iat`: Issued-at timestamp
   - `exp`: Expiration timestamp (short-lived, e.g., 5 minutes)
 - The JWT secret SHALL be stored as an environment variable on the backend. The same secret is embedded (obfuscated) in the frontend bundle.

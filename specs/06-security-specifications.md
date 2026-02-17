@@ -165,7 +165,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 **Implementation**:
 
-- A static **client ID** (e.g., `"tjmonserrat-web"`) and a static **secret key** are embedded in the frontend code.
+- A static **client ID** (e.g., `"tjmonsi-web"`) and a static **secret key** are embedded in the frontend code.
 - The frontend SHALL obfuscate these credentials in the JavaScript bundle to make extraction non-trivial. Obfuscation methods include:
   - Splitting the secret across multiple variables
   - Using string transformation functions
@@ -177,7 +177,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 ```json
 {
-  "iss": "tjmonserrat-web",
+  "iss": "tjmonsi-web",
   "iat": 1708000000,
   "exp": 1708000300
 }
