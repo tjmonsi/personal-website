@@ -1,10 +1,10 @@
 ---
 title: Infrastructure Specifications
-version: 2.6
+version: 2.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac]
+tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac, artifact-registry, cloud-dns, pubsub]
 ---
 
 ## Infrastructure Specifications
@@ -130,6 +130,8 @@ ENTRYPOINT ["/server"]
 - The `USER jack:jack` directive ensures the process cannot escalate to root.
 - Cloud Run SHALL be configured with `--no-allow-unauthenticated` for internal endpoints and `run.googleapis.com/container-security-context: {"runAsNonRoot": true}` annotation where supported.
 
+**Artifact Registry**: Docker images are pushed to Artifact Registry (INFRA-018) by the CI/CD pipeline. Cloud Run pulls images from `asia-southeast1-docker.pkg.dev/<project-id>/website-images/`.
+
 **Health Check**: `GET /health` (returns `200` with `{"status": "ok"}`)
 
 ---
@@ -224,7 +226,7 @@ ENTRYPOINT ["/server"]
 **Configuration**:
 
 - **Structured logging** from Cloud Run (JSON format)
-- **Log sinks**: Route error logs to a dedicated log bucket with 90-day retention
+- **Log retention**: Cloud Logging's default `_Default` bucket with retention configured to **90 days**. No dedicated custom log bucket is provisioned — BigQuery log sinks (INFRA-010) handle long-term analytics and the default bucket provides sufficient operational access for debugging and incident response.
 - **BigQuery log sinks**: Route logs to BigQuery dataset for long-term analytics and SQL querying (see INFRA-010)
 - **Alerts**:
   - Error rate > 1% of requests over 5 minutes
@@ -270,6 +272,8 @@ ENTRYPOINT ["/server"]
 | Apply    | `terraform apply`    | Apply changes to GCP (manual approval required)  |
 
 > **Note**: The Terraform pipeline authenticates using the Terraform service account (SEC-012). The `Apply` stage requires manual approval (e.g., environment protection rules in GitHub Actions) to prevent unintended infrastructure changes. Details to be finalized during implementation.
+
+> **Observability**: For observability of Terraform operations (GitHub Actions logs, Cloud Audit Logs, Git history), see OBS-009 in [07-observability-specifications.md](07-observability-specifications.md).
 
 **Branch strategy**:
 - `main` → Production
@@ -352,6 +356,19 @@ ENTRYPOINT ["/server"]
 - A Cloud Logging log sink SHALL be configured to route Cloud Armor rate-limit events to a Pub/Sub topic.
 - Log sink filter: Cloud Armor logs where the response status is `429` (rate limit exceeded).
 - The Pub/Sub topic triggers the `process-rate-limit-logs` Cloud Function.
+
+**Pub/Sub Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Topic name           | `rate-limit-events`                                |
+| Subscription         | Auto-created by Cloud Functions Gen 2 Eventarc trigger |
+| Region               | `asia-southeast1`                                  |
+| Message retention    | 7 days (default)                                   |
+
+- The log sink publishes matching log entries to the `rate-limit-events` Pub/Sub topic.
+- Cloud Functions Gen 2 uses an Eventarc trigger on this topic to invoke `process-rate-limit-logs`.
+- The Pub/Sub topic and log sink are managed by Terraform (INFRA-016).
 
 **Processing Logic**:
 
@@ -681,16 +698,52 @@ terraform {
 **Scope of Terraform Management**:
 
 Terraform manages GCP resources defined in the spec, including but not limited to:
-- Cloud Run services (INFRA-003)
-- Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014)
+- GCP API enablement (via `google_project_service` resources — e.g., `run.googleapis.com`, `cloudfunctions.googleapis.com`, `firestore.googleapis.com`, `compute.googleapis.com`, `aiplatform.googleapis.com`, `dns.googleapis.com`, `artifactregistry.googleapis.com`, `pubsub.googleapis.com`, `firebase.googleapis.com`, `sts.googleapis.com`, `iamcredentials.googleapis.com`, `eventarc.googleapis.com`, etc.)
+- Cloud Run services (INFRA-003) — service definition only; image deployment via CI/CD (see Deployment Boundary below)
+- Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014) — function configuration only; code deployment via CI/CD (see Deployment Boundary below)
 - VPC and networking (INFRA-009)
 - Cloud Armor security policies (INFRA-005)
 - Cloud Load Balancer (INFRA-004)
-- Cloud Scheduler jobs (INFRA-008b, INFRA-008d scheduler, INFRA-014b)
-- BigQuery dataset and log sinks (INFRA-010)
+- Cloud Scheduler jobs (INFRA-008b, INFRA-008e, INFRA-014b)
+- Pub/Sub topics and subscriptions (INFRA-008c log sink trigger — `rate-limit-events` topic)
+- Cloud Logging log sinks — BigQuery sinks (INFRA-010a–010e) + Pub/Sub sink for rate-limit events (INFRA-008c)
+- Cloud Logging default bucket retention configuration (INFRA-007)
 - Firestore Native database (INFRA-012)
+- Artifact Registry (INFRA-018)
+- Cloud DNS (INFRA-017)
 - IAM bindings and service accounts (except bootstrap resources)
-- Cloud DNS (INFRA-006)
+- Workload Identity Federation pools and providers (SEC-010 content CI/CD pool only; Terraform CI/CD pool is a bootstrap resource — see below)
+- Vertex AI API enablement and IAM roles (no dedicated Vertex AI resources — only API calls from Cloud Run and Cloud Functions via `roles/aiplatform.user`)
+
+**Resources NOT managed by Terraform** (Firebase CLI handles):
+
+- Firebase Hosting site configuration, custom domain, rewrite rules, headers, and asset deployment (INFRA-001)
+- Firebase Functions deployment (INFRA-002)
+
+> **Note**: Terraform enables the Firebase API (`firebase.googleapis.com`) and creates the Firebase Hosting site resource (`google_firebase_hosting_site`). Custom domain configuration, rewrite rules (`firebase.json`), security headers (SEC-005), and deployment are all handled by `firebase deploy` via the CI/CD pipeline. See INFRA-001 and INFRA-002 for details.
+
+**Firestore Enterprise (INFRA-006) — Investigate Terraform Support**:
+
+Firestore Enterprise in MongoDB compatibility mode is a newer feature. Terraform provider support for this specific mode should be verified during implementation using the `google_firestore_database` resource.
+
+- **If supported**: Terraform manages the database creation, mode selection (MongoDB compat), and region (`asia-southeast1`). Add to the Terraform scope.
+- **If not supported**: Add Firestore Enterprise to the bootstrap resources table below (manual provisioning via Console or `gcloud`).
+
+> **Note**: Verification of Terraform provider support for Firestore Enterprise MongoDB compatibility mode is a prerequisite task during the implementation phase.
+
+**Deployment Boundary — Terraform Provisions, CI/CD Deploys**:
+
+Terraform and the Application CI/CD pipeline have complementary but distinct responsibilities:
+
+| Aspect | Terraform | CI/CD Pipeline |
+| ------ | --------- | -------------- |
+| Cloud Run | Creates service, configures scaling, memory, VPC, IAM, env vars | Deploys new container image revisions via `gcloud run deploy` |
+| Cloud Functions | Creates functions, configures runtime, memory, triggers, IAM | Deploys new function code via `gcloud functions deploy` |
+| Image/Code version | Ignored (`lifecycle { ignore_changes }` on image/code fields) | Managed — pushes new versions on merge |
+
+- Terraform manages the _infrastructure definition_ (service configuration, scaling, networking, IAM).
+- CI/CD manages the _application deployment_ (container images, function code).
+- Terraform uses `lifecycle { ignore_changes }` on the container image field for Cloud Run and the source field for Cloud Functions. This prevents `terraform apply` from reverting CI/CD-deployed revisions to a stale image or code version.
 
 **Bootstrap Resources** (manually created, NOT managed by Terraform):
 
@@ -699,12 +752,73 @@ Terraform manages GCP resources defined in the spec, including but not limited t
 | GCP Project                    | Must exist before Terraform can run                      |
 | Terraform state bucket (INFRA-015) | Cannot manage its own state storage                  |
 | Terraform service account (SEC-012) | Must exist to authenticate Terraform operations     |
+| Terraform CI/CD WIF pool and provider (SEC-012) | Must exist before Terraform CI/CD pipeline can authenticate via Workload Identity Federation (chicken-and-egg) |
 | Billing account link           | Pre-existing organizational resource                     |
 
 **Notes**:
 - Terraform configuration files will be added to this repository in a subsequent implementation phase. The current phase is documentation only.
 - The `/terraform/` directory structure, module organization, and resource definitions are to be determined during implementation.
 - State locking via GCS prevents concurrent Terraform runs from corrupting state.
+
+---
+
+#### INFRA-017: Cloud DNS
+
+**Purpose**: Manage DNS zone and records for `tjmonsi.com` and `api.tjmonsi.com`, routing traffic to the Cloud Load Balancer (INFRA-004).
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Zone name            | `tjmonsi-com`                                      |
+| DNS name             | `tjmonsi.com.`                                     |
+| Visibility           | Public                                             |
+| DNSSEC               | Enabled (recommended)                              |
+
+**DNS Records**:
+
+| Record Type | Name                  | Value                                      | TTL     |
+| ----------- | --------------------- | ------------------------------------------ | ------- |
+| A           | `tjmonsi.com`         | Cloud Load Balancer IP (INFRA-004)         | 300     |
+| AAAA        | `tjmonsi.com`         | Cloud Load Balancer IPv6 (INFRA-004)       | 300     |
+| A           | `api.tjmonsi.com`     | Cloud Load Balancer IP (INFRA-004)         | 300     |
+| AAAA        | `api.tjmonsi.com`     | Cloud Load Balancer IPv6 (INFRA-004)       | 300     |
+| CAA         | `tjmonsi.com`         | `0 issue "pki.goog"`                       | 3600    |
+
+> **Note**: Both `tjmonsi.com` and `api.tjmonsi.com` point to the same Cloud Load Balancer. URL Map routing (INFRA-004) directs traffic to the appropriate backend (Firebase Hosting or Cloud Run) based on the hostname.
+
+**Notes**:
+- Cloud DNS is managed by Terraform (INFRA-016).
+- NS records for the zone are auto-generated by Cloud DNS and must be configured at the domain registrar.
+- TTL of 300 seconds (5 minutes) allows reasonably fast propagation during changes while reducing DNS query volume.
+- CAA record restricts SSL certificate issuance to Google's certificate authority (`pki.goog`), which issues the Google-managed certificates used by the Load Balancer.
+
+---
+
+#### INFRA-018: Artifact Registry
+
+**Purpose**: Store Docker container images for the Go backend API (INFRA-003). Cloud Run requires container images to be stored in Artifact Registry.
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Repository name      | `website-images`                                   |
+| Format               | Docker                                             |
+| Region               | `asia-southeast1`                                  |
+| Immutable tags       | Disabled (allow tag updates for `latest`)          |
+| Cleanup policies     | Retain last 10 tagged versions; delete untagged images older than 7 days |
+
+**Usage**:
+
+- The Application CI/CD pipeline builds the Go backend Docker image and pushes it to: `asia-southeast1-docker.pkg.dev/<project-id>/website-images/<image-name>:<tag>`
+- Cloud Run (INFRA-003) pulls the image from this repository.
+- Terraform manages the Artifact Registry repository resource (INFRA-016). The CI/CD pipeline pushes images.
+
+**Notes**:
+- Artifact Registry is the recommended container registry for GCP. Container Registry (`gcr.io`) is deprecated.
+- Expected storage: < 500 MB (small Go binary in distroless image). Within Artifact Registry's 500 MB free tier.
+- The cleanup policy prevents unbounded storage growth from old image versions.
 
 ---
 
@@ -845,7 +959,7 @@ The following analytics are enabled by the BigQuery data via Looker Studio:
 
 | Metric / Report              | Source Table                    | Description                                    |
 | ---------------------------- | ------------------------------- | ---------------------------------------------- |
-| Unique visitors              | `frontend_tracking_logs`        | Distinct IP addresses per time period          |
+| Unique visitors              | `frontend_tracking_logs`        | Distinct `visitor_id` values per time period   |
 | Page views over time         | `frontend_tracking_logs`        | Total and per-page view counts                 |
 | Top pages by visits          | `frontend_tracking_logs`        | Most visited pages ranked                      |
 | Referrer sources             | `frontend_tracking_logs`        | Traffic sources breakdown                      |
@@ -875,6 +989,7 @@ The following analytics are enabled by the BigQuery data via Looker Studio:
                        ▼
               ┌─────────────────┐
               │   Cloud DNS     │
+              │   (INFRA-017)   │
               │  tjmonsi.com    │
               │ api.tjmonsi.com │
               └────────┬────────┘
@@ -915,9 +1030,11 @@ Cloud Scheduler ───────▶│  │Cloud Function │             �
                         │  └───────────────┘             │
                         │                                │
                         │  ┌───────────────┐             │
-Cloud Armor Log Sink ──▶│  │Cloud Function │             │
-                        │  │(Log Proc.)    │             │
+Pub/Sub ───────────────▶│  │Cloud Function │             │
+(rate-limit-events) ───▶│  │(Log Proc.)    │             │
                         │  └───────────────┘             │
+                        │          ▲                      │
+                        │  Cloud Armor Log Sink           │
                         │                                │
                         │  ┌───────────────┐             │
 Cloud Scheduler ───────▶│  │Cloud Function │             │
@@ -949,7 +1066,13 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
 
               Cloud Logging (receives all service logs)
                            │
-                           ▼ (5 Log Sinks)
+                ┌──────────┼──────────┐
+                ▼          ▼          ▼
+        ┌────────────┐  (5 Log Sinks)
+        │  _Default  │
+        │   bucket   │
+        │  (90-day)  │
+        └────────────┘
               ┌──────────────────────────────────┐
               │           BigQuery               │
               │    Dataset: website_logs          │
@@ -968,10 +1091,21 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
               └──────────────────────────────────┘
 
               ┌──────────────────────────────────┐
+              │   Artifact Registry              │
+              │   (INFRA-018)                    │
+              │   website-images (Docker)        │
+              │   asia-southeast1                │
+              └──────────────────────────────────┘
+                           ▲
+              CI/CD pushes Docker images
+              Cloud Run pulls images
+
+              ┌──────────────────────────────────┐
               │   Terraform (IaC)                │
               │   Configs in /terraform/         │
               │   SA: terraform-builder@         │
               │      <project-id>                │
+              │   Auth: WIF (GitHub Actions)     │
               └────────────┬─────────────────────┘
                            │ (remote state)
                            ▼

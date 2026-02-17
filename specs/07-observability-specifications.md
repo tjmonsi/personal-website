@@ -1,10 +1,10 @@
 ---
 title: Observability Specifications
-version: 2.2
+version: 2.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [observability, logging, monitoring, tracking, vector-search]
+tags: [observability, logging, monitoring, tracking, vector-search, terraform, alerting, sli, slo]
 ---
 
 ## Observability Specifications
@@ -250,22 +250,36 @@ const speedInfo = connection ? {
 
 ### OBS-005: Alerting
 
+**Notification Channels**:
+
+| Channel  | Destination                         | Notes                                      |
+| -------- | ----------------------------------- | ------------------------------------------ |
+| Email    | `<alert-email>` *(obfuscated)*      | Primary notification channel for all alerts |
+
+> **Note**: Email is the only notification channel. Slack and PagerDuty channels are not used for this personal website. All alerts are sent to the specified email address via Cloud Monitoring notification channels.
+
 **Alert Policies**:
 
 | Alert                            | Condition                                   | Notification Channel | Severity |
 | -------------------------------- | ------------------------------------------- | -------------------- | -------- |
-| High error rate                  | Error rate > 1% over 5 min                  | Email / Slack        | Warning  |
-| High latency                    | P95 latency > 2s over 5 min                 | Email / Slack        | Warning  |
-| Masked 500 errors               | Any ERROR log with "masked_500" label        | Email / Slack        | Critical |
-| Database connection failure     | db_connection_pool_active = 0                | Email / Slack / PagerDuty | Critical |
-| Cloud Run memory pressure       | Memory utilization > 80% over 5 min          | Email / Slack        | Warning  |
-| High rate limit triggers        | Cloud Armor `blocked_by_policy` count > 100 in 5 min (via Cloud Monitoring) | Email / Slack | Warning |
-| Indefinite ban applied          | Log entry for indefinite ban                 | Email               | Info     |
-| Sitemap generation failure      | ERROR log from `generate-sitemap` Cloud Function | Email / Slack    | Warning  |
-| Gemini embedding API failure    | ERROR log from embedding API call (Cloud Run or Cloud Function) | Email / Slack | Warning |
-| Embedding sync failure          | ERROR log from `sync-article-embeddings` Cloud Function | Email / Slack | Warning |
-| Offender cleanup failure        | ERROR log from `cleanup-rate-limit-offenders` Cloud Function | Email / Slack | Warning |
-| High embedding cache miss rate  | `embedding_cache_misses_total` > 50 in 5 min | Email               | Info     |
+| High error rate                  | Error rate > 1% over 5 min                  | Email                | Warning  |
+| High latency                    | P95 latency > 2s over 5 min                 | Email                | Warning  |
+| Masked 500 errors               | Any ERROR log with "masked_500" label        | Email                | Critical |
+| Database connection failure     | db_connection_pool_active = 0                | Email                | Critical |
+| Cloud Run memory pressure       | Memory utilization > 80% over 5 min          | Email                | Warning  |
+| High rate limit triggers        | Cloud Armor `blocked_by_policy` count > 100 in 5 min (via Cloud Monitoring) | Email | Warning |
+| Indefinite ban applied          | Log entry for indefinite ban                 | Email                | Info     |
+| Sitemap generation failure      | ERROR log from `generate-sitemap` Cloud Function | Email            | Warning  |
+| Gemini embedding API failure    | ERROR log from embedding API call (Cloud Run or Cloud Function) | Email | Warning |
+| Embedding sync failure          | ERROR log from `sync-article-embeddings` Cloud Function | Email     | Warning |
+| Offender cleanup failure        | ERROR log from `cleanup-rate-limit-offenders` Cloud Function | Email | Warning |
+| High embedding cache miss rate  | `embedding_cache_misses_total` > 50 in 5 min | Email                | Info     |
+| Backend error log               | Any ERROR severity log from Cloud Run backend (INFRA-003) | Email   | Warning  |
+| Cloud Function error log        | Any ERROR severity log from any Cloud Function (INFRA-008a, 008c, 008d, INFRA-014) | Email | Warning |
+| Frontend error log              | Any ERROR severity log posted by frontend via Cloud Logging (OBS-003) | Email | Warning |
+| SLI availability breach         | Backend availability SLI drops below 99.9% over 1 hour (see OBS-010) | Email | Critical |
+
+**Cost**: Cloud Monitoring alerting is free for up to 500 alert policies and up to 6 notification channels. Email notifications have no per-message cost. See [Cloud Monitoring pricing](https://cloud.google.com/stackdriver/pricing).
 
 ---
 
@@ -359,3 +373,61 @@ Disallow: /
 - Propagate `X-Request-ID` in all log entries for that request.
 - Return `X-Request-ID` as a response header (useful for debugging with users).
 - IF distributed tracing is needed later, integrate with Cloud Trace (OpenTelemetry).
+
+---
+
+### OBS-009: Terraform & Infrastructure Operations
+
+**Purpose**: Acknowledge the observability of Terraform and infrastructure change operations.
+
+Terraform operations (`terraform plan`, `terraform apply`) are observable through existing mechanisms without dedicated custom dashboards or alerts:
+
+| Observability Source | What It Captures | Retention |
+| -------------------- | ---------------- | --------- |
+| GitHub Actions CI/CD logs | Full `terraform plan` and `terraform apply` output, including resource changes, errors, and timing | GitHub Actions default retention (90 days) |
+| Cloud Audit Logs (Admin Activity) | All GCP API calls made by the Terraform service account (`terraform-builder@`), including resource creation, modification, and deletion | 400 days (auto-retained by GCP, no cost) |
+| Cloud Audit Logs (Data Access) | Read operations by the Terraform SA (if enabled) | Configurable retention |
+| Git commit history | Terraform configuration changes (`.tf` files in `/terraform/`) | Permanent (Git) |
+
+> **Note**: For a personal website, GitHub Actions logs and Cloud Audit Logs provide sufficient visibility into infrastructure changes. No custom Terraform-specific dashboards or alert policies are defined at this time. If drift detection or Terraform-specific alerting becomes necessary, this section can be expanded.
+
+---
+
+### OBS-010: Service Level Indicators (SLI) & Objectives (SLO)
+
+**Purpose**: Define availability targets for the backend API to measure service reliability and trigger alerts when objectives are breached.
+
+**Backend Availability SLI**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Service              | Cloud Run backend API (INFRA-003)                  |
+| SLI type             | Availability (request-based)                       |
+| Good request         | HTTP response status < 500 (i.e., non-5xx responses) |
+| Total requests       | All HTTP requests to the Cloud Run backend         |
+| Measurement          | Cloud Monitoring `run.googleapis.com/request_count` metric with `response_code_class` filter |
+
+**SLO Target**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Availability target  | 99.9% uptime                                       |
+| Compliance period    | Rolling 30-day window                              |
+| Error budget         | 0.1% of requests may be 5xx (e.g., ~12 5xx errors per 12,000 requests/month in normal traffic) |
+
+**Alert**:
+
+| Alert                          | Condition                                      | Notification | Severity |
+| ------------------------------ | ---------------------------------------------- | ------------ | -------- |
+| SLI availability breach        | Availability drops below 99.9% over 1 hour     | Email (`<alert-email>`) | Critical |
+
+**Implementation**:
+
+- Use Cloud Monitoring [Service Monitoring](https://cloud.google.com/monitoring/service-monitoring) to define the SLI and SLO.
+- The SLO is defined on the Cloud Run service resource.
+- An alert policy fires when the burn rate indicates the error budget will be exhausted (fast-burn alert over 1 hour window).
+- This is the only SLI/SLO defined for this personal website. Additional SLIs (latency, etc.) can be added later if needed.
+
+**Cost**: Cloud Monitoring SLO monitoring is free. No additional cost beyond the existing Cloud Monitoring free tier. See [Cloud Monitoring pricing](https://cloud.google.com/stackdriver/pricing).
+
+> **Note**: The 99.9% target is aspirational for a personal website with scale-to-zero Cloud Run. Cold starts will occasionally cause elevated latency but should not produce 5xx errors. The SLO primarily guards against persistent backend failures (e.g., misconfiguration, dependency outages).

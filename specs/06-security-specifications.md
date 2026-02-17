@@ -1,10 +1,10 @@
 ---
 title: Security Specifications
-version: 2.4
+version: 2.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [security, rate-limiting, cors, authentication, vector-search, terraform, iac]
+tags: [security, rate-limiting, cors, authentication, vector-search, terraform, iac, wif, service-accounts]
 ---
 
 ## Security Specifications
@@ -25,7 +25,7 @@ tags: [security, rate-limiting, cors, authentication, vector-search, terraform, 
 | Embedding API abuse           | Embedding cache prevents redundant Gemini API calls; rate limiting on search endpoints | Application + Infrastructure |
 | Vector data exfiltration       | Firestore Native IAM; vectors contain no readable text         | Infrastructure |
 | Compromised CI/CD credentials  | Workload Identity Federation (keyless OIDC auth, no service account keys) | Infrastructure |
-| IaC state/credential exposure   | GCS bucket with versioning, no public access; Terraform SA key not committed to repo; least-privilege IAM | Infrastructure |
+| IaC state/credential exposure   | GCS bucket with versioning, no public access; WIF for CI/CD (no SA keys in pipeline); least-privilege IAM | Infrastructure |
 
 ---
 
@@ -435,9 +435,9 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 ---
 
-### SEC-012: Terraform Service Account
+### SEC-012: Terraform Service Account & Workload Identity Federation
 
-**Purpose**: Provide a dedicated, least-privilege service account for Terraform to manage GCP infrastructure resources (INFRA-016). This service account is a **manually created bootstrap resource** — it is NOT managed by Terraform itself. See AD-023 in [01-system-overview.md](01-system-overview.md).
+**Purpose**: Provide a dedicated, least-privilege service account for Terraform to manage GCP infrastructure resources (INFRA-016). The service account is a **manually created bootstrap resource** — it is NOT managed by Terraform itself. The Terraform CI/CD pipeline authenticates via **Workload Identity Federation** (WIF), consistent with the content CI/CD approach (SEC-010). See AD-023 in [01-system-overview.md](01-system-overview.md).
 
 **Service Account**: `terraform-builder@<project-id>.iam.gserviceaccount.com`
 
@@ -452,11 +452,58 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 > **Note**: The full set of IAM roles for the Terraform service account will be finalized during the implementation phase when the exact Terraform resource definitions are known. Roles will follow the principle of least privilege — only the permissions required to manage the specific resources in the Terraform configuration will be granted.
 
+**Workload Identity Federation Configuration (Terraform CI/CD)**:
+
+| Setting                       | Value                                              |
+| ----------------------------- | -------------------------------------------------- |
+| Workload Identity Pool        | `terraform-cicd-pool`                              |
+| Workload Identity Provider    | `github-actions` (OIDC)                            |
+| Issuer URI                    | `https://token.actions.githubusercontent.com`      |
+| Allowed audience              | Default (project number)                           |
+| Attribute mapping             | `google.subject` = `assertion.sub`, `attribute.repository` = `assertion.repository` |
+| Attribute condition           | `assertion.repository == "<owner>/personal-website"` |
+| Mapped service account        | `terraform-builder@<project-id>.iam.gserviceaccount.com` |
+
+> **Note**: The WIF pool and provider for Terraform CI/CD are separate from the content CI/CD pool (SEC-010) to maintain distinct trust boundaries. Each pool trusts only its respective repository.
+
 **Security Constraints**:
 
 - THE SYSTEM SHALL NOT grant the Terraform service account `roles/owner` or `roles/editor`. Only specific, granular roles SHALL be used.
-- THE SYSTEM SHALL NOT commit the service account key (JSON) to any repository. The key SHALL be stored securely by the project owner.
-- The service account key SHALL be used only for local Terraform runs or CI/CD pipeline authentication. For CI/CD, Workload Identity Federation SHOULD be evaluated as a keyless alternative (future improvement).
-- IF the service account key is compromised, THE SYSTEM SHALL revoke the key immediately, generate a new one, and audit recent Terraform state changes.
+- THE SYSTEM SHALL use **Workload Identity Federation** for the Terraform CI/CD pipeline (GitHub Actions). No long-lived service account keys (JSON key files) SHALL be used in CI/CD.
+- For local Terraform runs (development/debugging), the project owner MAY use a service account key stored securely outside any repository. This key SHALL NOT be committed to any repository.
+- The Terraform CI/CD pipeline authenticates via WIF using the `google-github-actions/auth` action, consistent with the pattern established in SEC-010.
+- IF a service account key is used for local runs and is compromised, THE SYSTEM SHALL revoke the key immediately, generate a new one, and audit recent Terraform state changes.
 - The service account SHALL NOT have access to application data (Firestore Enterprise collections, BigQuery analytics data, etc.) — only infrastructure management permissions.
 - The Terraform state bucket (INFRA-015) SHALL NOT be publicly accessible. Only the Terraform service account SHALL have write access.
+- Reference: [Workload Identity Federation for GitHub Actions](https://cloud.google.com/iam/docs/workload-identity-federation), [google-github-actions/auth](https://github.com/google-github-actions/auth)
+
+---
+
+### SEC-013: Consolidated Service Account Inventory
+
+**Purpose**: Provide a single reference of all service accounts used across the system, their IAM roles, scopes, and management method. This inventory ensures no default service accounts are used — each component has a dedicated service account for security, auditability, and least-privilege enforcement.
+
+**Service Account Inventory**:
+
+| # | Service Account Email | Name | Purpose | Key IAM Roles | Scope | Managed By |
+|---|----------------------|------|---------|---------------|-------|------------|
+| 1 | `cloud-run-api@<project-id>.iam.gserviceaccount.com` | Cloud Run API SA | Identity for the Go backend API (INFRA-003) | `roles/datastore.viewer` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI), Firestore Enterprise access (MongoDB wire protocol, via project-level role or custom role) | Project / specific resources | Terraform |
+| 2 | `cf-sitemap-gen@<project-id>.iam.gserviceaccount.com` | Sitemap Generator SA | Identity for the `generate-sitemap` Cloud Function (INFRA-008a) | Firestore Enterprise read (article collections: `technical_articles`, `blog_articles`) + read/write (`sitemap` collection) | INFRA-008a function | Terraform |
+| 3 | `cf-rate-limit-proc@<project-id>.iam.gserviceaccount.com` | Rate Limit Log Processor SA | Identity for the `process-rate-limit-logs` Cloud Function (INFRA-008c) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008c function | Terraform |
+| 4 | `cf-offender-cleanup@<project-id>.iam.gserviceaccount.com` | Offender Cleanup SA | Identity for the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008d function | Terraform |
+| 5 | `cf-embed-sync@<project-id>.iam.gserviceaccount.com` | Embedding Sync SA | Identity for the `sync-article-embeddings` Cloud Function (INFRA-014) | Firestore Enterprise read (articles), `roles/datastore.user` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI) | INFRA-014 function | Terraform |
+| 6 | `content-cicd@<project-id>.iam.gserviceaccount.com` | Content CI/CD SA | WIF-mapped SA for content repository GitHub Actions (SEC-010) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on `sync-article-embeddings` | INFRA-014 function | Terraform |
+| 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (state bucket), additional infra-management roles (TBD) | Project | **Manual** (bootstrap) |
+| 8 | `looker-studio-reader@<project-id>.iam.gserviceaccount.com` | Looker Studio Reader SA | Read-only BigQuery access for Looker Studio dashboards (SEC-009, INFRA-011) | `roles/bigquery.dataViewer` (dataset), `roles/bigquery.jobUser` (project) | `website_logs` dataset + project | Terraform |
+| 9 | `cloud-scheduler-invoker@<project-id>.iam.gserviceaccount.com` | Cloud Scheduler Invoker SA | OIDC token issuer for Cloud Scheduler jobs (INFRA-008b, 008e, 014b) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on target Cloud Functions | Target functions | Terraform |
+
+**Security Constraints**:
+
+- THE SYSTEM SHALL NOT use default service accounts (e.g., Compute Engine default SA, App Engine default SA) for any component. Each component has a dedicated SA with minimum required permissions.
+- All Terraform-managed service accounts SHALL be created via `google_service_account` resources in Terraform.
+- No service account SHALL have `roles/owner` or `roles/editor`.
+- Service accounts SHALL NOT have cross-component access unless explicitly documented above.
+- WIF-authenticated SAs (#6, #7) do not require JSON key files for CI/CD use.
+- The Looker Studio SA (#8) requires a JSON key for the Looker Studio data connector. This key SHALL be stored securely by the project owner and rotated every 90 days (see SEC-009).
+
+> **Note**: The exact IAM roles for the Cloud Run SA (#1) regarding Firestore Enterprise access will be finalized during implementation, depending on how the MongoDB wire protocol authentication is configured. At minimum, the SA needs credentials or IAM-based access to the Firestore Enterprise MongoDB endpoint.

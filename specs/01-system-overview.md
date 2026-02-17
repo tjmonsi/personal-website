@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.4
+version: 2.6
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -29,6 +29,9 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | CDN / WAF      | Google Cloud Load Balancer + Cloud Armor | Google Cloud                           |
 | Networking     | VPC with Private Google Access + Direct VPC Egress (Production only) | Google Cloud (asia-southeast1)           |
 | Scheduling     | Google Cloud Scheduler                 | Google Cloud (asia-southeast1)           |
+| Messaging      | Google Cloud Pub/Sub                   | Google Cloud (asia-southeast1)           |
+| DNS            | Google Cloud DNS                       | Google Cloud                             |
+| Container Registry | Google Artifact Registry           | Google Cloud (asia-southeast1)           |
 | Observability  | Google Cloud Logging + Cloud Monitoring + BigQuery | Google Cloud                |
 | Analytics      | Looker Studio                          | Google Cloud (owner-operated)            |
 | IaC            | Terraform (HashiCorp)                  | This repository (`/terraform/`)          |
@@ -60,6 +63,9 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Terraform                       | An open-source infrastructure-as-code (IaC) tool by HashiCorp for declaratively provisioning and managing cloud resources. Used here to manage GCP infrastructure. Configuration files stored in this repository under `/terraform/`. See: https://www.terraform.io/ |
 | Infrastructure as Code (IaC)    | The practice of managing and provisioning infrastructure through machine-readable definition files rather than manual processes. Enables version control, reproducibility, and auditability of infrastructure changes. |
 | Terraform Remote State          | Terraform state stored in a shared backend (here, GCS bucket INFRA-015) instead of locally, enabling team collaboration and state locking to prevent concurrent modifications. |
+| Cloud DNS                       | Google Cloud's managed DNS service. Used here to host the `tjmonsi.com` zone with A/AAAA records pointing to the Cloud Load Balancer. Managed by Terraform (INFRA-017). See: https://cloud.google.com/dns |
+| Artifact Registry               | Google Cloud's container image registry. Used here to store Docker images for the Go backend API. Replaces the deprecated Container Registry (`gcr.io`). Managed by Terraform (INFRA-018). See: https://cloud.google.com/artifact-registry |
+| Pub/Sub                         | Google Cloud's messaging service. Used here to route Cloud Armor rate-limit log entries from a Cloud Logging log sink to the `process-rate-limit-logs` Cloud Function (INFRA-008c). Topic: `rate-limit-events`. See: https://cloud.google.com/pubsub |
 
 ### High-Level Architecture
 
@@ -116,7 +122,13 @@ Cloud Scheduler ────────▶│  │  Cloud Function (Gen 2)    �
                          │  └────────────────────────────┘  │
                          │                                   │
                          │  ┌────────────────────────────┐  │
-Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
+Cloud Armor Log Sink ───▶│  │  Pub/Sub                   │  │
+                         │  │  (rate-limit-events)       │  │
+                         │  └────────────┬───────────────┘  │
+                         │               │                  │
+                         │               ▼                  │
+                         │  ┌────────────────────────────┐  │
+                         │  │  Cloud Function (Gen 2)    │  │
                          │  │  Rate Limit Log Processing │  │
                          │  │  (Node.js) → writes to DM-009 │
                          │  └────────────────────────────┘  │
@@ -201,7 +213,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 - **VPC** (Production only): `personal-website-vpc` in `asia-southeast1` with a `/28` subnet for Cloud Run and Cloud Functions Direct VPC Egress. Private Google Access enabled; no NAT router, no Serverless VPC Access Connector. Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc. The Development environment does NOT use a VPC to reduce cost.
 - **Cloud Run**: Min instances = 0 (scale to zero), Max instances = TBD based on budget
 - **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
-- **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink in `asia-southeast1`
+- **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink via Pub/Sub (`rate-limit-events` topic, see INFRA-008c) in `asia-southeast1`
 - **Cloud Functions**: Rate limit offender cleanup function (Gen 2, Node.js) triggered by Cloud Scheduler daily in `asia-southeast1`
 - **Cloud Functions**: Embedding sync function (Gen 2, Node.js) triggered by Content CI/CD pipeline (via Workload Identity Federation) and Cloud Scheduler (daily safety net, INFRA-014b) to sync content embeddings to Firestore Native in `asia-southeast1`
 - **BigQuery**: Dataset `website_logs` in `asia-southeast1` with 5 tables fed by Cloud Logging log sinks (see INFRA-010)
@@ -211,7 +223,8 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 - **Database**: Same region as Cloud Run (`asia-southeast1`) for low latency
 - **Firestore Native**: Vector search database in `asia-southeast1` with vector indexes on embedding fields (2048 dimensions, cosine distance). Max embedding dimension supported by Firestore Native is 2048. See: https://cloud.google.com/firestore/native/docs/vector-search
 - **Vertex AI**: Gemini `gemini-embedding-001` model in `asia-southeast1` for generating text embeddings via IAM-based auth
-- **Terraform**: Infrastructure managed via Terraform (INFRA-016) with remote state in GCS (INFRA-015). Terraform service account (SEC-012) is manually bootstrapped. Configuration files stored in `/terraform/` directory.
+- **Terraform**: Infrastructure managed via Terraform (INFRA-016) with remote state in GCS (INFRA-015). Terraform service account (SEC-012) authenticates via Workload Identity Federation in CI/CD. Configuration files stored in `/terraform/` directory.
+- **Artifact Registry**: Docker repository `website-images` in `asia-southeast1` for Go backend container images (INFRA-018).
 
 ### Content Management
 
@@ -221,7 +234,9 @@ Content (articles, front page, social links, external references) is managed thr
 
 | Environment | Purpose                                                   | Database          |
 | ----------- | --------------------------------------------------------- | ----------------- |
-| Development | Local development, testing, and pre-production validation | Firestore Emulator / Local MongoDB |
-| Production  | Live website                                              | Production Firestore Enterprise |
+| Development | Local development and testing only (no GCP deployment)    | Firestore Emulator / Local MongoDB (Firestore Enterprise), Local Firestore Emulator (Firestore Native) |
+| Production  | Live website                                              | Production Firestore Enterprise + Production Firestore Native |
 
-> **Note**: Only two environments are maintained. The Development environment doubles as a staging/pre-production environment since the owner can deploy immediately. No separate staging GCP project is provisioned.
+> **Note**: Only two environments are maintained. The Development environment is **local-only** — it runs entirely on the developer's machine using emulators and local databases. No GCP resources are provisioned or deployed for Development. The `dev` branch is used for local development and testing; code is merged to `main` for Production deployment. The owner can deploy immediately, so no separate staging GCP project is needed.
+
+> **Note on VPC**: The Production environment uses a VPC with Direct VPC Egress (INFRA-009). Since the Development environment is local-only, VPC configuration is not applicable to Development. References to "Development does not use a VPC" in other specs reflect the local-only nature of the Dev environment — there are no GCP services in Dev that would require a VPC.

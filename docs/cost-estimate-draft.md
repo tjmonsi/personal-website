@@ -1,6 +1,6 @@
 ---
 title: Draft Cost Estimate — GCP Monthly Costs
-version: 0.5-draft
+version: 0.7-draft
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -24,6 +24,18 @@ This document provides a rough cost estimate for running the personal website in
 - [Vertex AI Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 - [Firestore Native Pricing](https://cloud.google.com/firestore/pricing)
 ---
+
+### Changes from v0.6-draft
+
+- **Cloud Monitoring Alerting**: Added email notification channel and alert policies (OBS-005). Cost: $0.00 (free tier: 500 alert policies, 6 notification channels).
+- **SLI/SLO Monitoring**: Added backend availability SLI with 99.9% SLO target (OBS-010). Cost: $0.00 (Cloud Monitoring SLO monitoring is free).
+- **Alert consolidation**: All alert notification channels consolidated to email only (no Slack/PagerDuty for personal website).
+
+### Changes from v0.5-draft
+
+- **Artifact Registry**: Added `website-images` Docker repository (INFRA-018) line item. Cost: $0.00 (< 500 MB storage, within 500 MB free tier).
+- **Pub/Sub**: Added `rate-limit-events` topic (INFRA-008c) — no separate line item; within Pub/Sub free tier (10 GB/month messaging).
+- **Cloud Logging**: Updated INFRA-007 to use default `_Default` bucket with 90-day retention instead of a dedicated custom log bucket. No cost impact (default bucket first 50 GiB/month is free).
 
 ### Changes from v0.4-draft
 
@@ -117,6 +129,7 @@ This document provides a rough cost estimate for running the personal website in
 | | **Cloud Functions (Gen 2) Subtotal** | | | **$0.00** |
 | **Cloud Scheduler** | Jobs | 3 (sitemap generation, offender cleanup, embedding sync safety net) | Free tier: 3 jobs | $0.00 |
 | **Cloud Storage** | Terraform state bucket | < 1 MB (state files + versions) | Free tier: 5 GB | $0.00 |
+| **Artifact Registry** | Docker images | < 500 MB (Go binary in distroless image, ~10 versions) | Free tier: 500 MB | $0.00 |
 | **Cloud Logging** | Log ingestion | < 50 GiB/month | Free tier: 50 GiB/month | $0.00 |
 | **Cloud Monitoring** | Metrics | Basic metrics | Free tier covers | $0.00 |
 | **Cloud DNS** | Hosted zone | 1 zone | $0.20/zone/month | $0.20 |
@@ -192,6 +205,7 @@ This document provides a rough cost estimate for running the personal website in
 | | **Cloud Functions (Gen 2) Subtotal** | | | **$0.00** |
 | **Cloud Scheduler** | Jobs | 3 | Free tier | $0.00 |
 | **Cloud Storage** | Terraform state bucket | < 1 MB | Free tier: 5 GB | $0.00 |
+| **Artifact Registry** | Docker images | < 500 MB | Free tier: 500 MB | $0.00 |
 | **Cloud Logging** | Log ingestion | ~5 GiB | Free tier: 50 GiB | $0.00 |
 | **Cloud DNS** | Zone + queries | 1 zone, ~600K queries | $0.20 + $0.24 | $0.44 |
 
@@ -216,8 +230,9 @@ This document provides a rough cost estimate for running the personal website in
 | Cloud Functions (Gen 2) | $0.00 | $0.00 | 4 functions, all within free tier |
 | Cloud Scheduler | $0.00 | $0.00 | Within free tier (3 jobs, 3 free allowed) |
 | Cloud Storage (Terraform state) | $0.00 | $0.00 | < 1 MB state files, within 5 GB free tier |
+| Artifact Registry | $0.00 | $0.00 | < 500 MB Docker images, within free tier |
 | Cloud DNS | $0.20 | $0.44 | Minimal |
-| Cloud Logging/Monitoring | $0.00 | $0.00 | Within free tier |
+| Cloud Logging/Monitoring | $0.00 | $0.00 | Within free tier (alerting, SLI/SLO monitoring included) |
 | **Total** | **~$30.32** | **~$36.16** | |
 
 ### Cost Optimization Scenarios
