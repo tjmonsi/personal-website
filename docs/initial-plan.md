@@ -1,0 +1,32 @@
+# Plan
+
+I want to have a personal website.
+
+The website will be deploy on a Google Cloud Project.
+
+The frontend will use a Nuxt4/Vue/Vite setup running on Firebase Hosting and Firebase Functions.
+There will be no server involved on Nuxt4. The frontend will just have the following:
+- A frontpage of who I am and links to my technical blog, and my opinions, my other links, notable notes outside
+- A technical blog page which has a list of technical articles I wrote with a title and abstract and a citation text if they want to cite it. Both the title and the citation is clickable, and the abstract will have a button Read more which links to the article. The top of that page is a search bar and filter to categories and tags and date range for updated.
+- A technical blog page article which shows the technical article with a table of contents at the right side using the headers as links. The top part of the article will show the title, written by me, first date of creation, last update, the tags involved, category of the article, and a collapsible table of changelogs for that article. It is paginated as well and show what page you are and left and right buttons to go previous page or next page. The left and right buttons will not show if it is the first page or last page respectively.
+- An opinion page which list all of my opinions about various things. It would be the same style and build as the technical blog page. It will have a search bar  and filter to categories and tags and date range for updated
+- An opinion page article which will be the same as a technical blog page article setup.
+- The other links page is a list of social media links that they can follow me or contact me
+- Notable notes outside page is a list of curated links and abstracts of things I have written on other websites or Github repos I want to share or Colab notebooks I want to share. The list will have a title, date, and abstract for each item and will link them to the following website pages I have linked. There will be a search bar and filter by category, tags, and date range
+- All search bars have a limit of 300 characters. Anything more and the user cannot type. Pasting a text more than 300 characters is also prohibited. There should be a checker in the frontend just in case that will try to send it still and it will return a snackbar error that search bar has a limit of 300 characters.
+- Sending anything on the backend will show a loading bar on the top of the page, if it returns an error - depending on the HTTP status code, a snackbar will appear to tell in human helpful terms what the error is and if they need to do something. If they don't need to do something, then tell the user through the snackbar that I have been notified of the error.
+- If the user goes to a page 404, it will show a funny randomized annecdote about things not being found.
+- Send tracking to my backend on the current visitor's page visit. The tracking should send anonymous data but should show the browser version, IP address from where it came from, the action of the user, and where they came from if possible
+- It should send frontend error data to our backend especially network error data (like slowness of loading) with relevant data about the browser, IP address, and detected connection speed
+- Have a "page" for robots.txt to tell bots how to treat the pages and rate limits for them.
+
+The backend will use Go setup running on Cloud Run behind Google Load Balancer and Cloud Armor. It will have the following things
+- The root will load a markdown text of the frontpage. This will load it from a Firestore Enterprise Database using Mongodb ORM.
+- The /technical will show a list of technical blogs with 10 items. The size of the list is not changeable. Each item will only show the title, title-slug-with-creation-date-and-time (or filename in md), category, abstract, tags, date created, date updated. It will return a maximum number of techinical items and what page is the user at so that it will be helpful for the frontend. It will also take in query parameters on the search query it will use, the category to filter, the list of tags separated by commas that it wants to filter, and the date range of the date created. It will check if the search query is more than 300 characters. If is, it will return a 400 error. If the search returns nothing, return a 404. To limit security attack vector, it will return either a 404 or 400 unless it is a legitimate 503 (network error) which is outside our concern. Returning a 500 is prohibited but should be logged properly with relevant information for us to look at our Cloud logs.
+- The /techinical/(slug).md should have a .md at the end. It will get the slug title and get the particular article from the technical table. If the article does not exist return 404. If there is no .md in the link, return a 404. If it doesn't follow the prescribed article slug pattern, it will return a 404. To limit security attack vector, it will return either a 404 or 400 unless it is a legitimate 503 (network error) which is outside our concern. Returning a 500 is prohibited but should be logged properly with relevant information for us to look at our Cloud logs.
+- The /blog will return my opinions articles and will follow what I have put in /technical in terms of functionalities but look at my blog table
+- The /blog/(slug).md will return my opinion article and will follow what I have put in /technical/(slug).md in terms of functionalities but look at my blog table
+- The /socials will return a list of social links and data
+- The /others will return a list of other notes data table and will follow what I have put in /technical in terms of functionalities but look at my others table
+- Have a proper rate limit for API calls that is ok for a single user visit but also note that a single IP address might be used by several visitors because of how older ISPs work with their networks. Take note of API calls for bots. If a caller reaches a rate limit, return the proper HTTP status code for it and tell them when to call again. If a particular caller is a repeat offender for 5x in a span of a week, then block that particular caller for 30 days. If it is a repeat offender of 2x after the 30 days ban, block for 90 days. If it is a repat offender of 2x after the 90 days ban, block indefinitely.
+- Only GET method is allowed on all endpoints. Return 405 if a method that is not GET is used. 
