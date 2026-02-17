@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 1.9
+version: 2.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -363,9 +363,9 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 ---
 
-### SEC-010: Vector Search & Gemini API Security
+### SEC-010: Vector Search & Vertex AI Security
 
-**Purpose**: Secure the vector search infrastructure, including Firestore Native Mode access, Gemini embedding API, and the embedding cache.
+**Purpose**: Secure the vector search infrastructure, including Firestore Native Mode access, Vertex AI embedding API, and the embedding cache.
 
 #### Firestore Native Mode Access Control
 
@@ -378,19 +378,16 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - THE SYSTEM SHALL NOT grant Cloud Run write access to the Firestore Native database. Cloud Run only reads vectors for search.
 - Only the `sync-article-embeddings` Cloud Function SHALL have write access to Firestore Native.
 
-#### Gemini Embedding API Access Control
+#### Vertex AI Embedding API Access Control
 
-| Principal                              | Mechanism                              | Scope   | Purpose                                    |
+| Principal                              | Role                                   | Scope   | Purpose                                    |
 | -------------------------------------- | -------------------------------------- | ------- | ------------------------------------------ |
-| Cloud Run service account              | API key (Secret Manager)               | Project | Call Gemini embedding API for query vectors |
-| `sync-article-embeddings` Cloud Function SA | API key (Secret Manager)          | Project | Call Gemini embedding API for article vectors |
+| Cloud Run service account              | `roles/aiplatform.user`               | Project | Call Vertex AI Gemini embedding API for query vectors |
+| `sync-article-embeddings` Cloud Function SA | `roles/aiplatform.user`           | Project | Call Vertex AI Gemini embedding API for article vectors |
 
 **Constraints**:
-- The Gemini API key SHALL be stored in Google Cloud Secret Manager and accessed at runtime via the Secret Manager API.
-- Both the Cloud Run service account and the `sync-article-embeddings` Cloud Function service account SHALL have `roles/secretmanager.secretAccessor` for the Gemini API key secret.
-- THE SYSTEM SHALL NOT embed the API key in source code, environment variables, or container images.
-- The API key SHALL be restricted to the `generativelanguage.googleapis.com` API only.
-- IF the API key is compromised, THE SYSTEM SHALL revoke the key immediately and generate a new one in Secret Manager.
+- No other service account SHALL have access to the Vertex AI Embeddings API.
+- The embedding API is called within Google Cloud infrastructure using IAM-based authentication (no external API keys).
 
 #### Embedding Cache Security
 

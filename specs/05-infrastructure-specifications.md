@@ -1,10 +1,10 @@
 ---
 title: Infrastructure Specifications
-version: 2.0
+version: 2.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
-tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, gemini-api]
+tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai]
 ---
 
 ## Infrastructure Specifications
@@ -376,7 +376,7 @@ ENTRYPOINT ["/server"]
 | Database ID              | `vector-search` (named database, not `(default)`)  |
 | Region                   | `asia-southeast1`                                  |
 | Collections              | `technical_article_vectors`, `blog_article_vectors`, `others_vectors` |
-| Vector indexes           | One per collection on `embedding` field (768 dimensions, COSINE) |
+| Vector indexes           | One per collection on `embedding` field (2048 dimensions, COSINE). 2048 is the maximum embedding dimension supported by Firestore Native. See: https://cloud.google.com/firestore/native/docs/vector-search |
 
 **Vector Index Configuration** (per collection):
 
@@ -384,7 +384,7 @@ ENTRYPOINT ["/server"]
 gcloud firestore indexes composite create \
   --database=vector-search \
   --collection-group=technical_article_vectors \
-  --field-config=vector-config='{"dimension":768,"flat":{}}',field-path=embedding
+  --field-config=vector-config='{"dimension":2048,"flat":{}}',field-path=embedding
 ```
 
 > Repeat for `blog_article_vectors` and `others_vectors`.
@@ -392,28 +392,29 @@ gcloud firestore indexes composite create \
 **Notes**:
 - Firestore Native Mode is required for vector search (`findNearest()` API). Firestore Enterprise in MongoDB compat mode does not support native vector search.
 - Both Firestore instances coexist in the same GCP project. The default database hosts Firestore Enterprise; the named database (`vector-search`) hosts Firestore Native.
-- Reference: https://firebase.google.com/docs/firestore/vector-search
+- Reference: https://cloud.google.com/firestore/native/docs/vector-search
 
 ---
 
-#### INFRA-013: Gemini API — Embedding
+#### INFRA-013: Vertex AI — Gemini Embedding API
 
-**Purpose**: Generate text embeddings using the `gemini-embedding-001` model for semantic search.
+**Purpose**: Generate text embeddings using the Gemini `gemini-embedding-001` model via Vertex AI for semantic search.
 
 **Configuration**:
 
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
-| API                  | Gemini API (`embedContent`)                        |
+| API                  | Vertex AI Embeddings API (`predict`)               |
 | Model                | `gemini-embedding-001`                             |
-| Output dimensions    | 768 (via `output_dimensionality` parameter; default is 3072) |
+| Region               | `asia-southeast1`                                  |
+| Output dimensions    | 2048 (via `output_dimensionality` parameter; default is 3072; 2048 is Firestore Native max) |
 | Task type            | `RETRIEVAL_DOCUMENT` (used for both document indexing and search queries) |
-| Normalization        | L2-normalize all 768-dimensional vectors before storage (required for non-3072 dimensions) |
-| Authentication       | API key stored in Secret Manager                   |
+| Normalization        | L2-normalize all 2048-dimensional vectors before storage (required for non-3072 dimensions) |
+| Authentication       | IAM — service accounts with `roles/aiplatform.user` |
 
 **API Endpoint**:
 ```
-POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key={API_KEY}
+POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/locations/asia-southeast1/publishers/google/models/gemini-embedding-001:predict
 ```
 
 **Usage**:
@@ -424,14 +425,14 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-00
 | `sync-article-embeddings` (INFRA-014) | `RETRIEVAL_DOCUMENT` | Embed article content during sync          |
 
 **Cost Considerations**:
-- Pricing: free tier available; paid tier per 1,000 characters. See: https://ai.google.dev/gemini-api/docs/pricing
+- Pricing: per 1,000 characters of input text. See: https://cloud.google.com/vertex-ai/generative-ai/pricing
 - The embedding cache (DM-011) eliminates redundant API calls for repeated search queries.
 - Article embeddings are generated once per content change (not per request).
 
 **Normalization Note**:
-- The `gemini-embedding-001` model produces normalized embeddings at 3072 dimensions only. When using `output_dimensionality=768`, the truncated embedding MUST be L2-normalized (divide each component by the L2 norm of the vector) before storage and comparison.
+- The `gemini-embedding-001` model produces normalized embeddings at 3072 dimensions only. When using `output_dimensionality=2048`, the truncated embedding MUST be L2-normalized (divide each component by the L2 norm of the vector) before storage and comparison.
 
-**Reference**: https://ai.google.dev/gemini-api/docs/embeddings
+**Reference**: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings
 
 ---
 
@@ -460,7 +461,7 @@ POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-00
 3. Compute SHA-256 hash of the source text.
 4. Compare the hash with the `embedding_text_hash` field in the corresponding Firestore Native document.
    - **If unchanged**: Skip (no re-embedding needed).
-   - **If changed or new**: Call Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_DOCUMENT` and `output_dimensionality=768` to generate a 768-dimensional embedding vector. L2-normalize the vector before writing to Firestore Native.
+   - **If changed or new**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_DOCUMENT` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before writing to Firestore Native.
 5. Write/update the vector document in the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors`).
 6. Delete vector documents from Firestore Native that no longer have corresponding articles in Firestore Enterprise (orphan cleanup).
 
@@ -695,7 +696,7 @@ Content CI/CD ─────────▶│  │Cloud Function │          
                         Cloud Run + Embed Sync
                         query/write vectors
                         ┌────────────────────────────────┐
-                        │   Gemini API                   │
+                        │   Vertex AI (Gemini)           │
                         │   gemini-embedding-001          │
                         └────────────────────────────────┘
                                    ▲

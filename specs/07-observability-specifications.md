@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 1.8
+version: 1.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
