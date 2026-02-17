@@ -21,6 +21,9 @@ The following items require your input to finalize the specifications. Each clar
 
 **Impact**: Affects the entire data layer, Go driver/ORM choice, query capabilities (especially text search), and infrastructure setup.
 
+**Answer**
+We will be using the Firestore Enterprise: https://firebase.google.com/docs/firestore/enterprise/overview-enterprise-edition-modes
+and we will use the MongoDB compatibility mode: https://firebase.google.com/docs/firestore/enterprise/mongodb-compatibility-overview 
 ---
 
 ### CLR-002: GET-Only Constraint vs. Tracking & Error Reporting
@@ -39,6 +42,8 @@ Sending structured data via GET query parameters is possible but has limitations
 - **Option C**: Use a third-party analytics service (e.g., Google Analytics, Plausible) and skip custom tracking entirely.
 - **Option D**: Use a beacon/pixel approach (e.g., `GET /pixel.gif?data=...`) — common in analytics, stays GET-only.
 
+**Answer**
+You are correct, I forgot about the API endpoint to send these browser history logs. This is the only POST method url. Use the /t as the url. Make sure that /t is protected as of the moment that all call logs came from the browser using the website. Also, let's have a static id and static "secret" on the frontend and use obfuscating methods to create a JWT that makes the frontend be the only one allowed to call /t using the Bearer Token protocol.
 ---
 
 ### CLR-003: Article Pagination Meaning
@@ -52,6 +57,8 @@ Sending structured data via GET query parameters is possible but has limitations
 
 If splitting a single article: What determines a page break? Character count? A manual marker in the markdown? Heading-based?
 
+**Answer** 
+This should be for the list of articles (title and abstracts only) that are listed on a scroll and at the bottom is a pagination. For mobile readers, there should not be a pagination but more of a endless scrollable list
 ---
 
 ### CLR-004: Firebase Functions Purpose
@@ -65,6 +72,9 @@ If splitting a single article: What determines a page break? Character count? A 
 - **Option C**: Used as middleware between frontend and backend.
 
 **Recommendation**: Option A (remove) keeps the stack simpler. `robots.txt` and sitemap can be static files or served by the Go API.
+
+**Answer** 
+If I remember it right, if Nuxt4 is set to SPA only and deployed on Firebase Hosting, it still needs the Firebase Fucntions to serve the SPA while the hosting would serve the JS files. You can check it here: https://nuxt.com/deploy/firebase 
 
 ---
 
@@ -84,6 +94,9 @@ Full URL: `GET /technical/my-first-article-2025-01-15T10-30-00.md`
 
 Is this correct? Or do you prefer a different format (e.g., without time, or with a different separator)?
 
+**Answer**
+Example: my-first-article-2025-01-15-1030
+Full URL: GET /technical/my-first-article-2025-01-15-1030.md
 ---
 
 ### CLR-006: Categories — Predefined or Free-form?
@@ -96,6 +109,9 @@ Is this correct? Or do you prefer a different format (e.g., without time, or wit
 - **Option B**: Free-form — any string is valid as a category.
 
 If predefined, what are the initial categories? (e.g., DevOps, Programming, Cloud, AI/ML, etc.)
+
+**Answer**
+Categories are free-form, and based on the categories set in all of the articles. Let's have a table in MongoDB though that holds all categories and will be called every time the frontend goes to /technical or /blog (for frontend that is the link for opinions) or /others. Then let's have a /categories as to get the list. The table for categories should have the category name and date created. The frontend will not call the categories API again because it will save in the session storage of the frontend, and will just call again after 24 hours have passed.
 
 ---
 
@@ -115,6 +131,8 @@ Proposed defaults (per IP, per minute):
 
 Are these acceptable, or do you have different numbers in mind?
 
+**Answer**
+This will do, but put a reference on the rationale where these came from (like a link I can read)
 ---
 
 ### CLR-008: Ban Response Status Code
@@ -126,6 +144,9 @@ Are these acceptable, or do you have different numbers in mind?
 - **Option C**: `404 Not Found` — maximum opacity, attacker doesn't know they're banned.
 
 **Recommendation**: Option A (`403`) is clearest, but it adds a new status code outside the plan's stated set.
+
+**Answer**
+Use 429 for the initial 5 offenses, then 403 for blocked 30 days, then 404 for blocked for 90 days and indefinitely. 
 
 ---
 
@@ -143,6 +164,9 @@ Crawl-delay: 10
 
 Should any paths be disallowed (e.g., tracking endpoints, API-only paths)?
 
+**Answer**
+API-only paths and tracking endpoints should be blocked
+
 ---
 
 ### CLR-010: Deployment Region and Domain
@@ -154,6 +178,11 @@ Should any paths be disallowed (e.g., tracking endpoints, API-only paths)?
 1. What GCP region should the infrastructure be deployed to? (e.g., `us-central1`, `asia-southeast1`, `europe-west1`)
 2. What is the domain name? (e.g., `tjmonserrat.com`)
 3. Should the API be served from a path (`tjmonserrat.com/api/*`) or a subdomain (`api.tjmonserrat.com`)?
+
+**Answer**
+- GCP region of the Firestore should be asia-southeast1
+- GCP region of the Cloud Run should be asia-southeast1
+- API should be served through a subdomain
 
 ---
 
@@ -170,6 +199,8 @@ Should any paths be disallowed (e.g., tracking endpoints, API-only paths)?
 
 This is a significant architectural decision that affects future workflow.
 
+**Answer**
+Content will be managed through a different project repository which closely relates to Option C.
 ---
 
 ### CLR-012: Citation Format
@@ -185,6 +216,9 @@ This is a significant architectural decision that affects future workflow.
 
 And what does "clickable citation" mean — clicking copies to clipboard? Opens a citation popup?
 
+**Answer**
+- Multiple formats (user selects)
+
 ---
 
 ### CLR-013: 404 Page Anecdotes — Source
@@ -192,6 +226,9 @@ And what does "clickable citation" mean — clicking copies to clipboard? Opens 
 **Context**: The plan says the 404 page should show *"a funny randomized anecdote about things not being found."*
 
 **Question**: Do you have a set of anecdotes you'd like to use, or should I generate a list? How many should there be? (Recommended: 10-20 for good variety without repetition.)
+
+**Answers**
+Generate a list for now - use 30 anecdotes, preferably with references and links to where it came from
 
 ---
 
@@ -209,6 +246,9 @@ And what does "clickable citation" mean — clicking copies to clipboard? Opens 
 - Email
 - Others?
 
+**Answer**
+The social media links will be coming from a database list. Provide for me a draft of the structure of an social item in the table and I will review.
+
 ---
 
 ### CLR-015: Date Range Filter Semantics
@@ -220,6 +260,9 @@ And what does "clickable citation" mean — clicking copies to clipboard? Opens 
 - **Option A**: `date_created` (when the article was first published)
 - **Option B**: `date_updated` (when the article was last modified)
 - **Option C**: Both (two separate date range filters)
+
+**Answer**
+Use date_updated
 
 ---
 
@@ -242,3 +285,7 @@ And what does "clickable citation" mean — clicking copies to clipboard? Opens 
 | CLR-013 | 404 anecdotes source               | Low       | Frontend                |
 | CLR-014 | Social platforms list              | Low       | Data                    |
 | CLR-015 | Date range filter field            | Moderate  | API, frontend           |
+
+
+### Additional Notes from me:
+- The frontend should be an SPA but not installable. It should allow the reader to read it offline once they have downloaded the page data on to the mobile. For downloading, do a "smart" download where the tracking is in frontend only and based on heuristics download the page that they will likely to read. But also take note that if they want to read the file, they can click on the article to save for read when offline or in the list view. The list view should also show if the article is good for offline reading.
