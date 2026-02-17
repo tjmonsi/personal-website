@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 2.2
+version: 2.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -24,6 +24,7 @@ tags: [security, rate-limiting, cors, authentication, vector-search]
 | Analytics data exposure       | Least-privilege service account with read-only BigQuery access | Infrastructure |
 | Embedding API abuse           | Embedding cache prevents redundant Gemini API calls; rate limiting on search endpoints | Application + Infrastructure |
 | Vector data exfiltration       | Firestore Native IAM; vectors contain no readable text         | Infrastructure |
+| Compromised CI/CD credentials  | Workload Identity Federation (keyless OIDC auth, no service account keys) | Infrastructure |
 
 ---
 
@@ -365,7 +366,40 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 ---
 
-### SEC-010: Vector Search & Vertex AI Security
+### SEC-010: Workload Identity Federation (Content CI/CD)
+
+**Purpose**: Provide secure, keyless authentication for the content management CI/CD pipeline (GitHub Actions in the content repository) to invoke the `sync-article-embeddings` Cloud Function (INFRA-014) after pushing content to Firestore Enterprise. See AD-022 in [01-system-overview.md](01-system-overview.md).
+
+**Configuration**:
+
+| Setting                       | Value                                              |
+| ----------------------------- | -------------------------------------------------- |
+| Workload Identity Pool        | `content-cicd-pool`                                |
+| Workload Identity Provider    | `github-actions` (OIDC)                            |
+| Issuer URI                    | `https://token.actions.githubusercontent.com`      |
+| Allowed audience              | Default (project number)                           |
+| Attribute mapping             | `google.subject` = `assertion.sub`, `attribute.repository` = `assertion.repository` |
+| Attribute condition           | `assertion.repository == "<owner>/<content-repo>"` |
+| Mapped service account        | `content-cicd@<project-id>.iam.gserviceaccount.com` |
+
+**Service Account Roles**:
+
+| Role                            | Scope                                              | Purpose                                    |
+| ------------------------------- | -------------------------------------------------- | ------------------------------------------ |
+| `roles/cloudfunctions.invoker`  | `sync-article-embeddings` function                 | Invoke the Cloud Function via HTTP          |
+| `roles/run.invoker`             | `sync-article-embeddings` Cloud Run service (Gen 2)| Required because Gen 2 Cloud Functions run on Cloud Run |
+
+**Security Constraints**:
+
+- THE SYSTEM SHALL NOT use long-lived service account keys (JSON key files) for the content CI/CD pipeline. Workload Identity Federation provides short-lived OIDC tokens.
+- THE SYSTEM SHALL restrict the Workload Identity Provider to the specific content repository using an attribute condition on the `repository` claim.
+- THE SYSTEM SHALL NOT grant the WIF-mapped service account any roles beyond `roles/cloudfunctions.invoker` and `roles/run.invoker` on the embedding sync function. The content pipeline pushes to Firestore Enterprise using its own credentials (separate from this project's IAM).
+- The WIF-mapped service account SHALL NOT have access to Firestore Enterprise, Firestore Native, BigQuery, Vertex AI, or any other Google Cloud service.
+- Reference: [Workload Identity Federation for GitHub Actions](https://cloud.google.com/iam/docs/workload-identity-federation), [google-github-actions/auth](https://github.com/google-github-actions/auth)
+
+---
+
+### SEC-011: Vector Search & Vertex AI Security
 
 **Purpose**: Secure the vector search infrastructure, including Firestore Native Mode access, Vertex AI embedding API, and the embedding cache.
 

@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.2
+version: 2.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -55,6 +55,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Cosine Distance                 | A distance metric for comparing vector similarity. Range 0 (identical) to 2 (opposite). Lower values indicate higher semantic similarity. Firestore Native uses cosine distance for vector search. |
 | UUID v5                         | A deterministic UUID generated from a namespace UUID and a name string using SHA-1 hashing. The same inputs always produce the same UUID. Used here to derive cache document IDs from search query strings. |
 | Vertex AI                       | Google Cloud's machine learning platform. Used here to access the Gemini `gemini-embedding-001` model for generating text embeddings via the Vertex AI Embeddings API. Auth via IAM (`roles/aiplatform.user`). See: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings |
+| Workload Identity Federation    | A Google Cloud IAM feature that allows external workloads (e.g., GitHub Actions) to authenticate to GCP using short-lived OIDC tokens instead of long-lived service account keys. Used here for the content CI/CD pipeline to invoke the embedding sync Cloud Function (INFRA-014). See: https://cloud.google.com/iam/docs/workload-identity-federation |
 
 ### High-Level Architecture
 
@@ -123,9 +124,10 @@ Cloud Scheduler ────────▶│  │  Cloud Function (Gen 2)    �
                          │  └────────────────────────────┘  │
                          │                                   │
                          │  ┌────────────────────────────┐  │
-Content CI/CD ──────────▶│  │  Cloud Function (Gen 2)    │  │
-                         │  │  Embedding Sync            │  │
+Content CI/CD (WIF) ────▶│  │  Cloud Function (Gen 2)    │  │
+Cloud Scheduler ────────▶│  │  Embedding Sync            │  │
                          │  │  (Node.js) → syncs vectors │  │
+                         │  │  (daily safety net)        │  │
                          │  └────────────────────────────┘  │
                          └──────────────────────────────────┘
 
@@ -184,6 +186,7 @@ Content CI/CD ──────────▶│  │  Cloud Function (Gen 2) 
 | AD-019 | Deterministic embedding cache with UUID v5         | Search query embeddings are cached in Firestore Enterprise (`embedding_cache` collection, DM-011) using UUID v5 of the lowercased query as the document ID. No search strings are stored — only the deterministic UUID and the embedding vector. No cache expiration. The UUID v5 namespace is the standard URL namespace (`6ba7b811-9dad-11d1-80b4-00c04fd430c8`) with name = lowercased search text. |
 | AD-020 | Cosine distance threshold for vector search        | Search results with cosine distance > 0.35 (cosine similarity < 0.65) are excluded. This threshold balances recall and precision for semantic article search. Configurable per deployment. Reference: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings |
 | AD-021 | Vector search replaces text search for `q` parameter | When the `q` query parameter is present, the system uses Gemini embedding + Firestore Native vector similarity search instead of MongoDB text indexes. Without `q`, queries use Firestore Enterprise directly. Filtering (category, tags, date range) is always applied in Firestore Enterprise. |
+| AD-022 | Workload Identity Federation for content CI/CD | The content repository's GitHub Actions pipeline authenticates to GCP via Workload Identity Federation (WIF) — no long-lived service account keys. WIF provides OIDC-based authentication to invoke the `sync-article-embeddings` Cloud Function (INFRA-014) after pushing content. Reference: https://cloud.google.com/iam/docs/workload-identity-federation |
 
 ### Deployment Topology
 
@@ -195,7 +198,7 @@ Content CI/CD ──────────▶│  │  Cloud Function (Gen 2) 
 - **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
 - **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink in `asia-southeast1`
 - **Cloud Functions**: Rate limit offender cleanup function (Gen 2, Node.js) triggered by Cloud Scheduler daily in `asia-southeast1`
-- **Cloud Functions**: Embedding sync function (Gen 2, Node.js) triggered by Content CI/CD pipeline to sync content embeddings to Firestore Native in `asia-southeast1`
+- **Cloud Functions**: Embedding sync function (Gen 2, Node.js) triggered by Content CI/CD pipeline (via Workload Identity Federation) and Cloud Scheduler (daily safety net, INFRA-014b) to sync content embeddings to Firestore Native in `asia-southeast1`
 - **BigQuery**: Dataset `website_logs` in `asia-southeast1` with 5 tables fed by Cloud Logging log sinks (see INFRA-010)
 - **Looker Studio**: Owner-operated analytics dashboards connected to BigQuery via service account (see INFRA-011)
 - **Firebase Hosting**: Global CDN distribution for static assets
@@ -206,7 +209,7 @@ Content CI/CD ──────────▶│  │  Cloud Function (Gen 2) 
 
 ### Content Management
 
-Content (articles, front page, social links, external references) is managed through a **separate Git repository**. A CI/CD pipeline in that repository processes markdown files and pushes structured content to the Firestore Enterprise database on merge. The public-facing API remains read-only (`GET`-only, except `POST /t` for tracking).
+Content (articles, front page, social links, external references) is managed through a **separate Git repository**. A CI/CD pipeline (GitHub Actions) in that repository processes markdown files and pushes structured content to the Firestore Enterprise database on merge. The pipeline authenticates to GCP via **Workload Identity Federation** (AD-022) — no long-lived service account keys. After pushing content, the pipeline invokes the `sync-article-embeddings` Cloud Function (INFRA-014) to synchronize embedding vectors. The content pipeline's implementation is out of scope for this project; only the integration contract is specified (see INFRA-014 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). The public-facing API remains read-only (`GET`-only, except `POST /t` for tracking).
 
 ### Environments
 

@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 2.4
+version: 2.5
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -522,10 +522,17 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 | Region               | `asia-southeast1`                                  |
 | Memory               | 512 MB                                             |
 | Timeout              | 300 seconds (5 minutes)                            |
-| Trigger              | HTTP (invoked by content CI/CD pipeline)            |
+| Trigger              | HTTP (invoked by content CI/CD pipeline or Cloud Scheduler) |
 | Ingress              | Internal only (no public access)                   |
 | VPC egress           | Direct VPC Egress (see INFRA-009) — Production only |
-| Authentication       | Requires authentication (service account with appropriate roles) |
+| Authentication       | Requires authentication (OIDC token — see callers below) |
+
+**Callers and Authentication**:
+
+| Caller                                   | Authentication Method                                      | IAM Roles Required                                                                |
+| ---------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Content CI/CD pipeline (GitHub Actions)  | Workload Identity Federation (OIDC token, no service account keys) | `roles/cloudfunctions.invoker`, `roles/run.invoker` (Gen 2 functions run on Cloud Run) |
+| Cloud Scheduler (INFRA-014b)             | OIDC token from Cloud Scheduler service account            | `roles/cloudfunctions.invoker`, `roles/run.invoker`                               |
 
 **Sync Logic**:
 
@@ -541,8 +548,58 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 **Notes**:
 - This function is idempotent. Running it multiple times produces the same result.
 - The hash-based change detection avoids unnecessary Gemini API calls, reducing cost.
-- The content CI/CD pipeline SHOULD call this function after successfully pushing content to Firestore Enterprise.
-- The function MAY also be triggered by Cloud Scheduler as a periodic safety net (e.g., daily) to catch any missed syncs.
+- The content CI/CD pipeline SHALL call this function after successfully pushing content to Firestore Enterprise.
+- Cloud Scheduler (INFRA-014b) triggers this function daily as a safety net to catch any missed syncs.
+
+**Integration Contract (Content CI/CD Pipeline)**:
+
+The content management CI/CD pipeline is a **separate project** (GitHub repository) owned by the website owner. The pipeline's implementation is out of scope for this project. This section defines the integration points that the content pipeline MUST adhere to when interacting with this system.
+
+1. **Authentication**: The content CI/CD pipeline (GitHub Actions) SHALL authenticate to GCP using [Workload Identity Federation](https://cloud.google.com/iam/docs/workload-identity-federation) (WIF). No long-lived service account keys are permitted (CLR-056, AD-022).
+   - A Workload Identity Pool and Provider SHALL be configured in the GCP project to trust the content repository's GitHub Actions OIDC tokens.
+   - The WIF-mapped service account SHALL have `roles/cloudfunctions.invoker` and `roles/run.invoker` on the `sync-article-embeddings` function.
+   - Reference: [google-github-actions/auth](https://github.com/google-github-actions/auth)
+
+2. **Invocation**: After pushing content to Firestore Enterprise, the content pipeline SHALL invoke this function via one of:
+   - `gcloud functions call sync-article-embeddings --region=asia-southeast1` (using authenticated `gcloud` CLI), OR
+   - An authenticated HTTP POST to the function's URL with an OIDC identity token in the `Authorization: Bearer <token>` header.
+
+3. **Expected Firestore Enterprise Schema**: The content pipeline SHALL write articles to the following collections in Firestore Enterprise (MongoDB compat mode), conforming to the schemas defined in [04-data-model-specifications.md](04-data-model-specifications.md):
+   - `technical_articles` (DM-002)
+   - `blog_articles` (DM-003)
+   - `others` (DM-005)
+   - `categories` (DM-006)
+
+4. **Sequence of Operations**: The content pipeline SHOULD follow this order on merge to main:
+   1. Parse and validate markdown content.
+   2. Push structured content to Firestore Enterprise.
+   3. Update the `categories` collection with any new categories.
+   4. Call `sync-article-embeddings` to synchronize embedding vectors.
+
+5. **Error Handling**: If the call to `sync-article-embeddings` fails, the content pipeline SHOULD log the failure but NOT roll back the content push. The daily Cloud Scheduler safety net (INFRA-014b) ensures embeddings will be synchronized within 24 hours.
+
+---
+
+##### INFRA-014b: Cloud Scheduler — `trigger-sync-article-embeddings`
+
+**Purpose**: Periodic safety net that triggers the `sync-article-embeddings` Cloud Function daily to catch any missed syncs from the content CI/CD pipeline.
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Job name             | `trigger-sync-article-embeddings`                  |
+| Schedule             | Daily at 04:00 UTC (`0 4 * * *`)                   |
+| Target               | Cloud Function `sync-article-embeddings` (HTTP trigger) |
+| HTTP method          | POST                                               |
+| Authentication       | OIDC token (service account with `roles/cloudfunctions.invoker` and `roles/run.invoker`) |
+| Region               | `asia-southeast1`                                  |
+| Retry config         | Max 3 retries with exponential backoff             |
+
+**Notes**:
+- The function is idempotent — if all embeddings are already in sync (hash unchanged), the function exits quickly with no Gemini API calls.
+- Running at 04:00 UTC minimizes overlap with peak traffic (asia-southeast1 timezone).
+- This is the 3rd Cloud Scheduler job (alongside `trigger-sitemap-generation` and `trigger-cleanup-rate-limit-offenders`), within the free tier of 3 jobs.
 
 ---
 
@@ -763,8 +820,9 @@ Cloud Scheduler ───────▶│  │Cloud Function │             �
                         │  └───────────────┘             │
                         │                                │
                         │  ┌───────────────┐             │
-Content CI/CD ─────────▶│  │Cloud Function │             │
-                        │  │(Embed Sync)   │             │
+Content CI/CD (WIF) ───▶│  │Cloud Function │             │
+Cloud Scheduler ───────▶│  │(Embed Sync)   │             │
+                        │  │(daily safety) │             │
                         │  └───────┬───────┘             │
                         └──────────│─────────────────────┘
                                    │

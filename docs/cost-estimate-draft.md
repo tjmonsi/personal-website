@@ -1,6 +1,6 @@
 ---
 title: Draft Cost Estimate — GCP Monthly Costs
-version: 0.3-draft
+version: 0.4-draft
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -24,6 +24,11 @@ This document provides a rough cost estimate for running the personal website in
 - [Vertex AI Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 - [Firestore Native Pricing](https://cloud.google.com/firestore/pricing)
 ---
+
+### Changes from v0.3-draft
+
+- **Cloud Scheduler**: Updated from 2 to 3 jobs (added `trigger-sync-article-embeddings` daily safety net, INFRA-014b). All 3 jobs remain within the free tier of 3.
+- **Content CI/CD authentication**: Documented as Workload Identity Federation (no cost impact — WIF is free). See CLR-056, AD-022, SEC-010.
 
 ### Changes from v0.2-draft
 
@@ -101,10 +106,10 @@ This document provides a rough cost estimate for running the personal website in
 | | **Firebase Functions Subtotal** | | | **$0.00** |
 | **Cloud Functions (Gen 2)** | generate-sitemap | ~120 invocations/month (every 6h), 256 MB, <1s each | Free tier: 2M invocations | $0.00 |
 | | process-rate-limit-logs | ~10 invocations/month (rare at low traffic) | Free tier covers | $0.00 |
-| | sync-article-embeddings | ~10 invocations/month (on content CI/CD merges) | Free tier covers | $0.00 |
+| | sync-article-embeddings | ~40 invocations/month (~10 content CI/CD + ~30 daily Cloud Scheduler) | Free tier covers | $0.00 |
 | | cleanup-rate-limit-offenders | ~30 invocations/month (daily via Cloud Scheduler) | Free tier covers | $0.00 |
 | | **Cloud Functions (Gen 2) Subtotal** | | | **$0.00** |
-| **Cloud Scheduler** | Jobs | 2 (sitemap generation, offender cleanup) | Free tier: 3 jobs | $0.00 |
+| **Cloud Scheduler** | Jobs | 3 (sitemap generation, offender cleanup, embedding sync safety net) | Free tier: 3 jobs | $0.00 |
 | **Cloud Logging** | Log ingestion | < 50 GiB/month | Free tier: 50 GiB/month | $0.00 |
 | **Cloud Monitoring** | Metrics | Basic metrics | Free tier covers | $0.00 |
 | **Cloud DNS** | Hosted zone | 1 zone | $0.20/zone/month | $0.20 |
@@ -175,10 +180,10 @@ This document provides a rough cost estimate for running the personal website in
 | | **Firebase Functions Subtotal** | | | **$0.00** |
 | **Cloud Functions (Gen 2)** | generate-sitemap | ~120/month | Free tier covers | $0.00 |
 | | process-rate-limit-logs | ~500 invocations (more rate limit events during spike) | Free tier covers | $0.00 |
-| | sync-article-embeddings | ~20/month | Free tier covers | $0.00 |
+| | sync-article-embeddings | ~50/month (~20 content CI/CD + ~30 daily Cloud Scheduler) | Free tier covers | $0.00 |
 | | cleanup-rate-limit-offenders | ~30/month | Free tier covers | $0.00 |
 | | **Cloud Functions (Gen 2) Subtotal** | | | **$0.00** |
-| **Cloud Scheduler** | Jobs | 2 | Free tier | $0.00 |
+| **Cloud Scheduler** | Jobs | 3 | Free tier | $0.00 |
 | **Cloud Logging** | Log ingestion | ~5 GiB | Free tier: 50 GiB | $0.00 |
 | **Cloud DNS** | Zone + queries | 1 zone, ~600K queries | $0.20 + $0.24 | $0.44 |
 
@@ -201,7 +206,7 @@ This document provides a rough cost estimate for running the personal website in
 | Cloud Load Balancer | $18.00 | $18.07 | Fixed forwarding rule cost dominates |
 | Firebase Hosting + Functions | $0.00 | $0.00 | Within free tier for both scenarios |
 | Cloud Functions (Gen 2) | $0.00 | $0.00 | 4 functions, all within free tier |
-| Cloud Scheduler | $0.00 | $0.00 | Within free tier (2 jobs, 3 free allowed) |
+| Cloud Scheduler | $0.00 | $0.00 | Within free tier (3 jobs, 3 free allowed) |
 | Cloud DNS | $0.20 | $0.44 | Minimal |
 | Cloud Logging/Monitoring | $0.00 | $0.00 | Within free tier |
 | **Total** | **~$30.32** | **~$36.16** | |
