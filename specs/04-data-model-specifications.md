@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 1.7
+version: 1.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -180,48 +180,9 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 
 ---
 
-#### DM-007: `tracking`
+#### ~~DM-007~~ and ~~DM-008~~: Removed
 
-**Description**: Stores anonymous page visit tracking data. Data is written by the `POST /t` endpoint.
-
-| Field          | Type     | Required | Description                                    |
-| -------------- | -------- | -------- | ---------------------------------------------- |
-| `_id`          | string   | Yes      | Document identifier                            |
-| `page`         | string   | Yes      | Page URL visited                               |
-| `referrer`     | string   | No       | Referrer URL                                   |
-| `action`       | string   | Yes      | User action (e.g., "page_view")                |
-| `browser`      | string   | Yes      | Browser name and version                       |
-| `ip_address`   | string   | Yes      | Client IP address                              |
-| `connection_speed` | object | No     | Connection speed info (effective_type, downlink, rtt) |
-| `timestamp`    | datetime | Yes      | Visit timestamp (UTC)                          |
-
-**Indexes**:
-
-| Index Name         | Fields       | Type     | Purpose                |
-| ------------------ | ------------ | -------- | ---------------------- |
-| `idx_timestamp`    | `timestamp`  | Standard | Time-based queries     |
-| `idx_page`         | `page`       | Standard | Page hit analytics     |
-
-**Data Retention**: TTL index SHALL auto-expire tracking data after 90 days.
-
----
-
-#### DM-008: `error_reports`
-
-**Description**: Stores frontend error reports.
-
-| Field             | Type     | Required | Description                             |
-| ----------------- | -------- | -------- | --------------------------------------- |
-| `_id`             | string   | Yes      | Document identifier                     |
-| `error_type`      | string   | Yes      | Error classification                    |
-| `error_message`   | string   | Yes      | Error description                       |
-| `page`            | string   | Yes      | Page URL where error occurred           |
-| `browser`         | string   | Yes      | Browser name and version                |
-| `ip_address`      | string   | Yes      | Client IP address                       |
-| `connection_speed`| object   | No       | Connection speed info (effective_type, downlink, rtt) |
-| `timestamp`       | datetime | Yes      | Error timestamp (UTC)                   |
-
-**Data Retention**: TTL index SHALL auto-expire error reports after 30 days.
+**Note**: The `tracking` (DM-007) and `error_reports` (DM-008) Firestore collections have been removed. Tracking and error report data from `POST /t` is no longer stored in Firestore. Instead, the Go backend emits structured log entries to stdout, which Cloud Logging ingests and routes to BigQuery via dedicated log sinks (INFRA-010c for frontend errors, INFRA-010e for frontend tracking). BigQuery is the sole persistence layer for this data. See OBS-002 and OBS-003 in [07-observability-specifications.md](07-observability-specifications.md).
 
 ---
 
@@ -377,11 +338,8 @@ others (many documents) [Firestore Enterprise]
     └── category field → referenced in categories collection
     └── vector search via others_vectors [Firestore Native]
 
-tracking (many documents, append-only)
-    └── standalone, TTL auto-expiry (90 days)
-
-error_reports (many documents, append-only)
-    └── standalone, TTL auto-expiry (30 days)
+~~tracking~~ (REMOVED — data flows to BigQuery via structured logs)
+~~error_reports~~ (REMOVED — data flows to BigQuery via structured logs)
 
 rate_limit_offenders (many documents)
     └── offense records written by process-rate-limit-logs Cloud Function (INFRA-008c) via Cloud Armor log sink

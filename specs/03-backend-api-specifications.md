@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 1.7
+version: 1.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -457,8 +457,9 @@ For error reporting:
 
 - THE SYSTEM SHALL extract the client IP from `X-Forwarded-For` or the connection source.
 - THE SYSTEM SHALL add a server-side UTC timestamp.
-- IF `action` is `"page_view"`, THE SYSTEM SHALL write to the `tracking` collection (DM-007).
-- IF `action` is `"error_report"`, THE SYSTEM SHALL write to the `error_reports` collection (DM-008).
+- IF `action` is `"page_view"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the tracking payload fields (page, referrer, action, browser, connection_speed, truncated IP, timestamp). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
+- IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, truncated IP, timestamp). This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
+- THE SYSTEM SHALL NOT write tracking or error report data to Firestore. Structured logging to stdout is the sole persistence mechanism; Cloud Logging routes these entries to BigQuery.
 - THE SYSTEM SHALL apply the standard rate limiting rules to this endpoint (see SEC-002).
 
 ---

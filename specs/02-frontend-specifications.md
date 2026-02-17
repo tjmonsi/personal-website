@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.6
+version: 1.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -270,8 +270,7 @@ tags: [frontend, nuxt4, vue3, spa]
   - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited. Client-side error reporting for performance monitoring. No cookies, session tracking, or third-party scripts are used.
   - **Purpose of Data Collection**: Understanding site usage patterns, monitoring site performance, improving user experience, and detecting abuse.
   - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond truncated IP and browser information, no third-party tracking scripts, no advertising data.
-  - **Data Retention (Short-Term)**: Visitor tracking data in the application database is automatically deleted after 90 days. Error reports are automatically deleted after 30 days.
-  - **Data Retention (Long-Term Analytics)**: Anonymized log data is exported to Google BigQuery for long-term analytics and trend analysis. This data is automatically deleted after 2 years. The same anonymization (IP truncation) applies — no full IP addresses are stored in BigQuery.
+  - **Data Retention**: Visitor tracking data and error reports are stored as anonymized log entries in Google BigQuery for long-term analytics and trend analysis. This data is automatically deleted after 2 years. The same anonymization (IP truncation) applies — no full IP addresses are stored in BigQuery. No tracking or error report data is stored in the application database.
   - **Analytics**: The website owner uses Looker Studio dashboards connected to BigQuery to view aggregate analytics (e.g., unique visitor counts, popular pages, referrer sources, browser distribution). These dashboards are private and not publicly accessible. No data is shared with third parties.
   - **Data Storage**: Data is stored in Google Cloud infrastructure in the `asia-southeast1` region.
   - **Your Rights**: Users may contact TJ Monserrat to request information about or deletion of any data associated with their IP address.

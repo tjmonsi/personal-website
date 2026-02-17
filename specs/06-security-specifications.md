@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 2.0
+version: 2.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -294,7 +294,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 **Anonymization Requirements**:
 
-- IP addresses SHALL be truncated **before** writing to any data store (Firestore or Cloud Logging/BigQuery):
+- IP addresses SHALL be truncated **before** emitting structured log entries (which flow to BigQuery via log sinks):
   - IPv4: Zero the last octet (e.g., `203.0.113.42` → `203.0.113.0`)
   - IPv6: Zero the last 80 bits
 - THE SYSTEM SHALL NOT store full IP addresses anywhere in the system.
@@ -305,14 +305,14 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | Data Store / Table                  | Data Type                          | Retention Period | Deletion Method       |
 | ----------------------------------- | ---------------------------------- | ---------------- | --------------------- |
-| Firestore `tracking` (DM-007)       | Anonymous page visit tracking      | 90 days          | TTL auto-expiry index |
-| Firestore `error_reports` (DM-008)  | Frontend error reports             | 30 days          | TTL auto-expiry index |
 | BigQuery `all_logs`                 | All project logs                   | 2 years          | BigQuery table expiry |
 | BigQuery `cloud_armor_lb_logs`      | Load balancer & WAF logs           | 2 years          | BigQuery table expiry |
+| BigQuery `frontend_tracking_logs`   | Visitor tracking logs              | 2 years          | BigQuery table expiry |
 | BigQuery `frontend_error_logs`      | Frontend error logs                | 2 years          | BigQuery table expiry |
 | BigQuery `backend_error_logs`       | Backend error logs                 | 2 years          | BigQuery table expiry |
-| BigQuery `frontend_tracking_logs`   | Visitor tracking logs              | 2 years          | BigQuery table expiry |
 | Firestore `rate_limit_offenders` (DM-009) | Rate limit offender records  | 90 days (no active ban) | Scheduled cleanup |
+
+> **Note**: Tracking and error report data from `POST /t` is NOT stored in Firestore. The Go backend emits structured log entries to stdout, which Cloud Logging routes to BigQuery via dedicated log sinks (INFRA-010). BigQuery is the sole persistence layer for this data.
 
 **Privacy Compliance**:
 

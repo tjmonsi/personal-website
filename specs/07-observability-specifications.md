@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 1.9
+version: 2.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -131,23 +131,24 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 **Data Collected**:
 
-| Data Point          | Source                          | Storage              |
-| ------------------- | ------------------------------- | -------------------- |
-| Page visited        | Frontend sends via `POST /t`    | `tracking` collection|
-| Referrer URL        | Frontend sends in request body  | `tracking` collection|
-| Browser + version   | Frontend sends in request body  | `tracking` collection|
-| IP address          | Request source IP / `X-Forwarded-For` | `tracking` collection|
-| User action         | Frontend sends action type      | `tracking` collection|
-| Connection speed    | Frontend sends from Navigator.connection API | `tracking` collection|
-| Timestamp           | Server-side UTC timestamp       | `tracking` collection|
+| Data Point          | Source                          | Storage                          |
+| ------------------- | ------------------------------- | -------------------------------- |
+| Page visited        | Frontend sends via `POST /t`    | Structured log → BigQuery        |
+| Referrer URL        | Frontend sends in request body  | Structured log → BigQuery        |
+| Browser + version   | Frontend sends in request body  | Structured log → BigQuery        |
+| IP address          | Request source IP / `X-Forwarded-For` | Structured log → BigQuery  |
+| User action         | Frontend sends action type      | Structured log → BigQuery        |
+| Connection speed    | Frontend sends from Navigator.connection API | Structured log → BigQuery |
+| Timestamp           | Server-side UTC timestamp       | Structured log → BigQuery        |
 
 **Privacy Measures**:
 
 - No cookies or session tracking
 - No fingerprinting beyond IP + User-Agent
 - Data auto-expires after 90 days (TTL index) in Firestore
-- IP addresses SHALL be truncated before storage: zero the last octet for IPv4 (e.g., `203.0.113.42` → `203.0.113.0`) and zero the last 80 bits for IPv6. This truncation happens in the Go backend before writing to Firestore and before emitting structured log entries (which flow to BigQuery via INFRA-010).
-- The same anonymized data is exported to BigQuery for long-term analytics (retained for up to 2 years — see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md))
+- IP addresses SHALL be truncated before storage: zero the last octet for IPv4 (e.g., `203.0.113.42` → `203.0.113.0`) and zero the last 80 bits for IPv6. This truncation happens in the Go backend before emitting structured log entries (which flow to BigQuery via INFRA-010).
+- Tracking and error data is NOT stored in Firestore. The `POST /t` handler emits structured log entries to stdout, which Cloud Logging ingests and routes to BigQuery via log sinks (INFRA-010). BigQuery is the sole persistence layer for tracking and error report data.
+- Data is retained for up to 2 years in BigQuery (see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)).
 
 ---
 
@@ -190,7 +191,7 @@ const speedInfo = connection ? {
 | HTTP errors           | Non-200 responses from API                  |
 | JavaScript errors     | Uncaught exceptions, promise rejections     |
 
-**Data Retention**: 30 days (TTL auto-expiry) in Firestore. Error report data is also exported to BigQuery (`frontend_error_logs` table) and retained for up to 2 years (see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). The same IP truncation applies — no full IP addresses are stored.
+**Data Retention**: Error report data is stored in BigQuery only (`frontend_error_logs` table) and retained for up to 2 years (see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). Error data is NOT written to Firestore. The same IP truncation applies — no full IP addresses are stored.
 
 ---
 
