@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 3.0
+version: 3.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -151,6 +151,8 @@ ENTRYPOINT ["/server"]
   - `api.tjmonsi.com/*` → Cloud Run backend
   - `tjmonsi.com/*` → Firebase Hosting + Functions
 - Subdomain routing is used to separate frontend and backend traffic.
+
+> **Note**: The Global External Application Load Balancer automatically provides both IPv4 and IPv6 addresses with a single forwarding rule. No separate forwarding rule is required for IPv6 traffic. AAAA records in INFRA-017 point to the LB's auto-assigned IPv6 address.
 
 ---
 
@@ -320,7 +322,7 @@ ENTRYPOINT ["/server"]
 | Schedule             | Every 6 hours (`0 */6 * * *`)                      |
 | Target               | Cloud Function `generate-sitemap` (HTTP trigger)   |
 | HTTP method          | POST                                               |
-| Authentication       | OIDC token (service account with Cloud Functions invoker role) |
+| Authentication       | OIDC token (service account with `roles/cloudfunctions.invoker` and `roles/run.invoker`) |
 | Region               | `asia-southeast1`                                  |
 | Retry config         | Max 3 retries with exponential backoff             |
 
@@ -426,7 +428,7 @@ ENTRYPOINT ["/server"]
 | Schedule             | Daily at 03:00 UTC (`0 3 * * *`)                   |
 | Target               | Cloud Function `cleanup-rate-limit-offenders` (HTTP trigger) |
 | HTTP method          | POST                                               |
-| Authentication       | OIDC token (service account with Cloud Functions invoker role) |
+| Authentication       | OIDC token (service account with `roles/cloudfunctions.invoker` and `roles/run.invoker`) |
 | Region               | `asia-southeast1`                                  |
 | Retry config         | Max 3 retries with exponential backoff             |
 
@@ -873,8 +875,10 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
 | ---------------- | -------------------------------------------------- |
 | Sink name        | `sink-backend-errors`                              |
 | Destination      | BigQuery table `website_logs.backend_error_logs`   |
-| Filter           | `resource.type="cloud_run_revision" AND severity>=ERROR AND NOT jsonPayload.log_type="frontend_error"` |
+| Filter           | `resource.type="cloud_run_revision" AND resource.labels.service_name="<cloud-run-service-name>" AND severity>=ERROR AND NOT jsonPayload.log_type="frontend_error"` |
 | Purpose          | Backend error trend analysis, masked 500 tracking  |
+
+> **Note**: The `resource.labels.service_name` filter scopes this sink to the Go backend Cloud Run service only. Without it, ERROR logs from Cloud Functions Gen 2 (which also run on Cloud Run infrastructure under `resource.type="cloud_run_revision"`) would land in this table. The actual service name is determined during implementation.
 
 ##### INFRA-010e: Frontend Tracking Logs
 

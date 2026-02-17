@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 2.0
+version: 2.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -150,7 +150,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `idx_slug`              | `slug`                          | Unique   | Slug lookups                 |
 | `idx_category`          | `category`                      | Standard | Category filtering           |
 | `idx_tags`              | `tags`                          | Multikey | Tag filtering                |
-| `idx_date_created`      | `date_created`                  | Standard | Date range queries           |
+| `idx_date_created`      | `date_created`                  | Standard | Internal use / content management queries |
 | `idx_date_updated`      | `date_updated`                  | Standard | Date range queries           |
 
 > **Note**: Full-text search for `others` is handled by vector similarity search via Firestore Native (see DM-012), not by MongoDB text indexes.

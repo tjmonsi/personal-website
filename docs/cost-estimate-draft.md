@@ -1,6 +1,6 @@
 ---
 title: Draft Cost Estimate — GCP Monthly Costs
-version: 0.7-draft
+version: 0.8-draft
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -24,6 +24,15 @@ This document provides a rough cost estimate for running the personal website in
 - [Vertex AI Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 - [Firestore Native Pricing](https://cloud.google.com/firestore/pricing)
 ---
+
+### Changes from v0.8-draft
+
+- **Load Balancer IPv4/IPv6**: Added clarifying note that the Global External Application Load Balancer serves both IPv4 and IPv6 traffic from a single forwarding rule (CLR-102). Cost unchanged at 1 forwarding rule (~$18/month).
+
+### Changes from v0.7-draft
+
+- **Artifact Registry**: Added Docker image line items to both scenario tables and cost summary (INFRA-018). Cost: $0.00 (< 500 MB, within free tier).
+- **Cloud Monitoring**: Updated cost summary to note alerting and SLI/SLO monitoring are included in the free tier.
 
 ### Changes from v0.6-draft
 
@@ -116,6 +125,8 @@ This document provides a rough cost estimate for running the personal website in
 | **Cloud Load Balancer** | Forwarding rules | 1 rule | $0.025/hour | ~$18.00 |
 | | Data processing | 120 MB | $0.008/GB | $0.001 |
 | | **Load Balancer Subtotal** | | | **~$18.00** |
+
+> **Note**: The Global External Application Load Balancer serves both IPv4 and IPv6 traffic from a single forwarding rule. AAAA (IPv6) DNS records do not require a separate forwarding rule. The cost estimate remains at 1 forwarding rule (~$18/month).
 | **Firebase Hosting** | Storage | < 1 GB (SPA assets) | Free tier: 10 GB | $0.00 |
 | | Data transfer | < 360 MB/day | Free tier: 360 MB/day | $0.00 |
 | | **Firebase Hosting Subtotal** | | | **$0.00** |

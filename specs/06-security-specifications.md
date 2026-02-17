@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 2.7
+version: 2.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -157,7 +157,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 - THE SYSTEM SHALL accept `GET` requests on all endpoints except `POST /t`.
 - THE SYSTEM SHALL accept `POST` requests only on the `/t` endpoint.
-- THE SYSTEM SHALL accept `OPTIONS` requests on all endpoints for CORS preflight handling. `OPTIONS` requests SHALL return appropriate CORS headers and SHALL NOT be subject to rate limiting.
+- THE SYSTEM SHALL accept `OPTIONS` requests on all endpoints for CORS preflight handling. `OPTIONS` requests SHALL return appropriate CORS headers and SHALL NOT be subject to application-level ban checks. Cloud Armor rate limiting applies to all requests regardless of HTTP method; however, CORS preflight caching (`max-age: 86400`) makes OPTIONS rate limiting negligible in practice.
 - WHEN any other HTTP method is used on any endpoint, THE SYSTEM SHALL return HTTP `405` with an appropriate `Allow` header.
 
 ---
@@ -289,9 +289,9 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - Allowed headers: `Content-Type, Accept, Authorization, If-None-Match, If-Modified-Since`
 - Exposed headers: `ETag, X-Request-ID` (via `Access-Control-Expose-Headers`)
 - Max age: `86400` (1 day)
-- `OPTIONS` preflight requests SHALL return the CORS headers and SHALL NOT be subject to rate limiting.
+- `OPTIONS` preflight requests SHALL return the CORS headers and SHALL NOT be subject to application-level ban checks. Cloud Armor rate limiting applies to all HTTP methods; CORS preflight caching (`max-age: 86400`) makes this negligible in practice.
 
-> **Note**: `ETag` must be explicitly exposed for the frontend to read it from cross-origin responses and use it for conditional requests (`If-None-Match`). `X-Request-ID` is exposed so the frontend can programmatically include it in error reports for debugging. `Last-Modified` is a CORS-safelisted response header and does not require explicit exposure.
+> **Note**: `ETag` must be explicitly exposed for the frontend to read it from cross-origin responses and use it for conditional requests (`If-None-Match`). `X-Request-ID` is exposed so users or the developer can reference it when reporting or debugging issues (e.g., via browser DevTools or the socials/contact page). `Last-Modified` is a CORS-safelisted response header and does not require explicit exposure.
 
 ---
 
@@ -510,5 +510,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - Service accounts SHALL NOT have cross-component access unless explicitly documented above.
 - WIF-authenticated SAs (#6, #7) do not require JSON key files for CI/CD use.
 - The Looker Studio SA (#8) requires a JSON key for the Looker Studio data connector. This key SHALL be stored securely by the project owner and rotated every 90 days (see SEC-009).
+
+> **Exception**: Firebase Functions (INFRA-002) uses the Firebase default service account because it only serves static HTML content and does not access any GCP resources. The default SA is acceptable for this component since it has no meaningful permissions to abuse.
 
 > **Note**: The exact IAM roles for the Cloud Run SA (#1) regarding Firestore Enterprise access will be finalized during implementation, depending on how the MongoDB wire protocol authentication is configured. At minimum, the SA needs credentials or IAM-based access to the Firestore Enterprise MongoDB endpoint.

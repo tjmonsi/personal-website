@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 2.0
+version: 2.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -25,7 +25,7 @@ tags: [backend, api, go, cloud-run]
 
 - THE SYSTEM SHALL accept `GET` requests on all endpoints except `POST /t`.
 - THE SYSTEM SHALL accept `POST` requests only on the `/t` endpoint (tracking and error reporting).
-- THE SYSTEM SHALL accept `OPTIONS` requests on all endpoints for CORS preflight handling. `OPTIONS` requests SHALL return appropriate CORS headers (see SEC-006 in [06-security-specifications.md](06-security-specifications.md)) and SHALL NOT be subject to rate limiting.
+- THE SYSTEM SHALL accept `OPTIONS` requests on all endpoints for CORS preflight handling. `OPTIONS` requests SHALL return appropriate CORS headers (see SEC-006 in [06-security-specifications.md](06-security-specifications.md)) and SHALL NOT be subject to application-level ban checks. Cloud Armor rate limiting applies to all requests regardless of HTTP method; however, CORS preflight caching (`max-age: 86400`) makes OPTIONS rate limiting negligible in practice.
 - WHEN a request uses any method other than the allowed method for an endpoint, THE SYSTEM SHALL return HTTP `405 Method Not Allowed` with an appropriate `Allow` header.
 
 #### Error Response Strategy
