@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 1.7
+version: 1.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -90,7 +90,7 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-stu
 | Request timeout      | 30 seconds                      |
 | Startup CPU boost    | Enabled                         |
 | Ingress              | Internal + Cloud Load Balancing |
-| VPC connector        | Connected to `personal-website-vpc` (see INFRA-009) |
+| VPC connector        | Connected to `personal-website-vpc` (see INFRA-009) — Production only. Development environment does NOT use a VPC. |
 
 **Docker Image**:
 
@@ -235,7 +235,7 @@ ENTRYPOINT ["/server"]
 
 **Branch strategy**:
 - `main` → Production
-- `staging` → Staging environment
+- `dev` → Development environment (also used for pre-production validation)
 - Feature branches → PR preview (optional)
 
 ---
@@ -259,7 +259,7 @@ ENTRYPOINT ["/server"]
 | Timeout              | 60 seconds                                         |
 | Trigger              | HTTP (invoked by Cloud Scheduler)                  |
 | Ingress              | Internal only (no public access)                   |
-| VPC connector        | Connected to the project VPC (see INFRA-009)       |
+| VPC connector        | Connected to the project VPC (see INFRA-009) — Production only |
 | Authentication       | Requires authentication (OIDC token from Cloud Scheduler service account) |
 
 **Sitemap Generation Logic**:
@@ -306,7 +306,7 @@ ENTRYPOINT ["/server"]
 | Timeout              | 60 seconds                                         |
 | Trigger              | Cloud Logging log sink (via Pub/Sub)               |
 | Ingress              | Internal only (no public access)                   |
-| VPC connector        | Connected to the project VPC (see INFRA-009)       |
+| VPC connector        | Connected to the project VPC (see INFRA-009) — Production only |
 | Authentication       | Service account with Firestore read/write access   |
 
 **Log Sink Configuration**:
@@ -333,9 +333,9 @@ ENTRYPOINT ["/server"]
 
 ---
 
-#### INFRA-009: VPC Network
+#### INFRA-009: VPC Network (Production Only)
 
-**Purpose**: Provide private networking for Cloud Run and Cloud Functions, restricting egress to Google Cloud APIs only.
+**Purpose**: Provide private networking for Cloud Run and Cloud Functions in the **Production** environment, restricting egress to Google Cloud APIs only. The Development environment does NOT use a VPC to reduce cost; services connect to Google Cloud APIs directly.
 
 **Configuration**:
 
@@ -356,10 +356,11 @@ ENTRYPOINT ["/server"]
 
 **Network Policy**:
 
-- Cloud Run and Cloud Functions SHALL route all egress traffic through the VPC.
+- Cloud Run and Cloud Functions SHALL route all egress traffic through the VPC in **Production**.
 - Egress SHALL be restricted to Google Cloud API endpoints only (via Private Google Access).
 - No outbound internet access is required — all external dependencies are Google Cloud services.
 - No Cloud NAT router is provisioned to minimize cost and attack surface.
+- In **Development**, no VPC is provisioned. Services connect to Google Cloud APIs directly to reduce cost.
 
 ---
 
@@ -545,7 +546,7 @@ The following analytics are enabled by the BigQuery data via Looker Studio:
                   │         │
         ┌─────────┘         └─────────┐
         ▼                             ▼
-┌───────────────┐       ┌──── VPC (asia-southeast1) ────┐
+┌───────────────┐       ┌──── VPC (Production only) ────┐
 │   Firebase    │       │                                │
 │   Hosting +   │       │  ┌───────────────┐             │
 │   Functions   │       │  │   Cloud Run   │             │

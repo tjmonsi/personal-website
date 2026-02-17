@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 1.6
+version: 1.7
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -280,7 +280,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 ### SEC-006: CORS
 
 - THE SYSTEM SHALL configure CORS headers since the frontend (`tjmonsi.com`) and backend (`api.tjmonsi.com`) are on different origins.
-- Allowed origin: `https://tjmonsi.com` (and staging equivalents)
+- Allowed origin: `https://tjmonsi.com` (and development environment equivalents)
 - Allowed methods: `GET, POST, OPTIONS`
 - Allowed headers: `Content-Type, Accept, Authorization, If-None-Match, If-Modified-Since`
 - Max age: `86400` (1 day)

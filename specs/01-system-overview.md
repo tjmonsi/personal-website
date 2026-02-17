@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 1.7
+version: 1.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -23,7 +23,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Log Processing | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
 | Database       | Firestore Enterprise (MongoDB compatibility mode) | Google Cloud (asia-southeast1)  |
 | CDN / WAF      | Google Cloud Load Balancer + Cloud Armor | Google Cloud                           |
-| Networking     | VPC with Private Google Access         | Google Cloud (asia-southeast1)           |
+| Networking     | VPC with Private Google Access (Production only) | Google Cloud (asia-southeast1)           |
 | Scheduling     | Google Cloud Scheduler                 | Google Cloud (asia-southeast1)           |
 | Observability  | Google Cloud Logging + Cloud Monitoring + BigQuery | Google Cloud                |
 | Analytics      | Looker Studio                          | Google Cloud (owner-operated)            |
@@ -41,7 +41,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Cloud Functions Gen 2           | Google Cloud's second-generation serverless functions platform, built on Cloud Run infrastructure. Used here for internal sitemap generation and Cloud Armor log processing. |
 | Log Sink                        | A Cloud Logging export mechanism that routes matching log entries to a destination (e.g., Pub/Sub, Cloud Function) for further processing. Used here to route Cloud Armor rate-limit events to a Cloud Function. |
 | Cloud Armor Adaptive Protection | A Cloud Armor feature that uses machine learning to detect and mitigate L7 DDoS attacks automatically, providing escalating protection without manual rule configuration. |
-| VPC                             | Virtual Private Cloud — isolated network environment for Google Cloud resources |
+| VPC                             | Virtual Private Cloud — isolated network environment for Google Cloud resources. Used in Production only; Development does not use a VPC to reduce cost. |
 | Cloud Scheduler                 | Google Cloud's managed cron job service for scheduling periodic tasks |
 | BigQuery                        | Google Cloud's serverless data warehouse for SQL-based log analytics. Used here to store exported Cloud Logging logs for long-term querying and Looker Studio integration. |
 | Looker Studio                   | Google Cloud's business intelligence and data visualization tool. Used here as an owner-operated analytics dashboard connected to BigQuery via a service account. |
@@ -68,7 +68,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 └──────────┬──────────────────────────────┬───────────────┘
            │                              │
            ▼                              ▼
-┌─────────────────────┐  ┌──── VPC (asia-southeast1) ─────┐
+┌─────────────────────┐  ┌──── VPC (Production only) ──────┐
 │  Firebase Hosting   │  │                                 │
 │  + Functions        │  │  ┌────────────────────────────┐ │
 │  (Nuxt 4 SPA)       │  │  │   Google Cloud Run          │ │
@@ -135,7 +135,7 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 | AD-008 | Content managed via separate Git repository    | Articles and content are maintained in a dedicated repo; a CI/CD pipeline pushes content to the database on merge. Keeps the public API read-only. |
 | AD-009 | Frontend SPA with offline reading support      | Not installable as PWA, but supports offline reading via smart prefetching and manual article saving in the browser |
 | AD-010 | Free-form categories derived from articles     | Categories are stored in a dedicated collection and synced from article metadata. Frontend caches categories in sessionStorage for 24 hours. |
-| AD-011 | VPC with Private Google Access                  | Cloud Run and Cloud Functions connect to Firestore via VPC, restricting egress to Google Cloud APIs only. No NAT router needed — minimizes cost and attack surface. |
+| AD-011 | VPC with Private Google Access (Production only) | In Production, Cloud Run and Cloud Functions connect to Firestore via VPC, restricting egress to Google Cloud APIs only. No NAT router needed — minimizes cost and attack surface. The Development environment does NOT use a VPC to reduce cost; services connect to Google Cloud APIs directly. |
 | AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Node.js), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 | AD-014 | Cloud Function for offense tracking from Cloud Armor logs | A log sink routes Cloud Armor rate-limit (429) events to a Cloud Function, which writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor's request-level rate limiting and the application's progressive banning logic. |
@@ -148,7 +148,7 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 - **Region (Firestore)**: `asia-southeast1`
 - **Region (Cloud Run)**: `asia-southeast1`
 - **Domain**: `tjmonsi.com` (frontend), `api.tjmonsi.com` (backend API)
-- **VPC**: `personal-website-vpc` in `asia-southeast1` with minimum subnets for Cloud Run and Cloud Functions connectors. Private Google Access enabled; no NAT router.
+- **VPC** (Production only): `personal-website-vpc` in `asia-southeast1` with minimum subnets for Cloud Run and Cloud Functions connectors. Private Google Access enabled; no NAT router. The Development environment does NOT use a VPC to reduce cost.
 - **Cloud Run**: Min instances = 0 (scale to zero), Max instances = TBD based on budget
 - **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
 - **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink in `asia-southeast1`
@@ -164,8 +164,9 @@ Content (articles, front page, social links, external references) is managed thr
 
 ### Environments
 
-| Environment | Purpose                         | Database          |
-| ----------- | ------------------------------- | ----------------- |
-| Development | Local development and testing   | Firestore Emulator / Local MongoDB |
-| Staging     | Pre-production validation       | Separate Firestore Enterprise instance |
-| Production  | Live website                    | Production Firestore Enterprise |
+| Environment | Purpose                                                   | Database          |
+| ----------- | --------------------------------------------------------- | ----------------- |
+| Development | Local development, testing, and pre-production validation | Firestore Emulator / Local MongoDB |
+| Production  | Live website                                              | Production Firestore Enterprise |
+
+> **Note**: Only two environments are maintained. The Development environment doubles as a staging/pre-production environment since the owner can deploy immediately. No separate staging GCP project is provisioned.
