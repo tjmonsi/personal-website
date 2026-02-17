@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 1.3
+version: 1.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -15,7 +15,7 @@ tags: [backend, api, go, cloud-run]
 - **Runtime**: Google Cloud Run (asia-southeast1)
 - **Network**: Behind Google Cloud Load Balancer + Cloud Armor
 - **Database**: Firestore Enterprise (MongoDB compatibility mode) via MongoDB Go driver
-- **Domain**: `api.tjmonserrat.com`
+- **Domain**: `api.tjmonsi.com`
 
 ### Global API Rules
 
@@ -23,6 +23,7 @@ tags: [backend, api, go, cloud-run]
 
 - THE SYSTEM SHALL accept `GET` requests on all endpoints except `POST /t`.
 - THE SYSTEM SHALL accept `POST` requests only on the `/t` endpoint (tracking and error reporting).
+- THE SYSTEM SHALL accept `OPTIONS` requests on all endpoints for CORS preflight handling. `OPTIONS` requests SHALL return appropriate CORS headers (see SEC-006 in [06-security-specifications.md](06-security-specifications.md)) and SHALL NOT be subject to rate limiting.
 - WHEN a request uses any method other than the allowed method for an endpoint, THE SYSTEM SHALL return HTTP `405 Method Not Allowed` with an appropriate `Allow` header.
 
 #### Error Response Strategy
@@ -206,11 +207,11 @@ tags: [backend, api, go, cloud-run]
       - date: "2025-01-15T10:30:00Z"
         description: Initial publication
     citations:
-      apa: "Monserrat, T.J. (2025). Article Title. tjmonserrat.com. https://tjmonserrat.com/technical/article-title-2025-01-15-1030.md"
-      mla: "Monserrat, TJ. \"Article Title.\" tjmonserrat.com, 15 Jan. 2025, https://tjmonserrat.com/technical/article-title-2025-01-15-1030.md."
-      chicago: "Monserrat, TJ. \"Article Title.\" tjmonserrat.com. January 15, 2025. https://tjmonserrat.com/technical/article-title-2025-01-15-1030.md."
-      bibtex: "@online{monserrat2025articletitle, author={Monserrat, TJ}, title={Article Title}, year={2025}, url={https://tjmonserrat.com/technical/article-title-2025-01-15-1030.md}}"
-      ieee: "T.J. Monserrat, \"Article Title,\" tjmonserrat.com, Jan. 15, 2025. [Online]. Available: https://tjmonserrat.com/technical/article-title-2025-01-15-1030.md"
+      apa: "Monserrat, T.J. (2025). Article Title. tjmonsi.com. https://tjmonsi.com/technical/article-title-2025-01-15-1030.md"
+      mla: "Monserrat, TJ. \"Article Title.\" tjmonsi.com, 15 Jan. 2025, https://tjmonsi.com/technical/article-title-2025-01-15-1030.md."
+      chicago: "Monserrat, TJ. \"Article Title.\" tjmonsi.com. January 15, 2025. https://tjmonsi.com/technical/article-title-2025-01-15-1030.md."
+      bibtex: "@online{monserrat2025articletitle, author={Monserrat, TJ}, title={Article Title}, year={2025}, url={https://tjmonsi.com/technical/article-title-2025-01-15-1030.md}}"
+      ieee: "T.J. Monserrat, \"Article Title,\" tjmonsi.com, Jan. 15, 2025. [Online]. Available: https://tjmonsi.com/technical/article-title-2025-01-15-1030.md"
     ---
 
     <article markdown body content>
@@ -234,7 +235,7 @@ tags: [backend, api, go, cloud-run]
 - THE SYSTEM SHALL return the article as a `text/markdown` response with YAML front matter containing metadata and the article body below the front matter delimiter (`---`).
 - THE SYSTEM SHALL generate citation strings dynamically from article metadata (title, author, date, slug).
 - Citations SHALL be generated in all supported formats: APA, MLA, Chicago, BibTeX, and IEEE.
-- Citation URLs SHALL include the `.md` extension, matching the frontend route format (e.g., `https://tjmonserrat.com/technical/article-title-2025-01-15-1030.md`).
+- Citation URLs SHALL include the `.md` extension, matching the frontend route format (e.g., `https://tjmonsi.com/technical/article-title-2025-01-15-1030.md`).
 - Both the frontend route (`/technical/slug.md`) and the backend API path (`GET /technical/{slug}.md`) use the `.md` extension, presenting a consistent URL to users and search engines as if accessing a markdown file.
 - The frontend SHALL parse the YAML front matter to extract metadata (title, author, category, tags, changelog, citations) and render the markdown body separately.
 
@@ -256,7 +257,7 @@ All query parameters, validation rules, response format, and error handling are 
 
 **Behavior**: Identical to BE-API-003 but queries the blog/opinions table instead of the technical table.
 
-All path parameters, validation rules, response format (including `text/markdown` with YAML front matter), conditional request support (ETag, Last-Modified, 304 Not Modified), and error handling are the same as BE-API-003. Citation URLs use the `/blog/` path prefix (e.g., `https://tjmonserrat.com/blog/slug.md`).
+All path parameters, validation rules, response format (including `text/markdown` with YAML front matter), conditional request support (ETag, Last-Modified, 304 Not Modified), and error handling are the same as BE-API-003. Citation URLs use the `/blog/` path prefix (e.g., `https://tjmonsi.com/blog/slug.md`).
 
 ---
 
@@ -487,7 +488,7 @@ For error reporting:
 
 #### BE-API-012: `GET /robots.txt`
 
-**Description**: Returns the robots exclusion protocol file for the API subdomain (`api.tjmonserrat.com`). Blocks all crawlers from the API subdomain.
+**Description**: Returns the robots exclusion protocol file for the API subdomain (`api.tjmonsi.com`). Blocks all crawlers from the API subdomain.
 
 **Request**: No parameters.
 

@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 1.3
+version: 1.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -47,7 +47,7 @@ tags: [security, rate-limiting, cors, authentication]
 - THE SYSTEM SHALL validate `tags` as a comma-separated list of alphanumeric strings with hyphens.
 - THE SYSTEM SHALL reject requests with unknown or malformed query parameters with HTTP `400`.
 
-> **Note**: This strict query parameter validation is intentional. The backend API (`api.tjmonserrat.com`) is not the URL shared on social media — the frontend URL (`tjmonserrat.com`) is. UTM parameters and other tracking query strings on the frontend URL are handled client-side and forwarded to the backend via `POST /t` as tracking data. The backend API expects a strict one-to-one mapping of query parameters for search and pagination purposes only.
+> **Note**: This strict query parameter validation is intentional. The backend API (`api.tjmonsi.com`) is not the URL shared on social media — the frontend URL (`tjmonsi.com`) is. UTM parameters and other tracking query strings on the frontend URL are handled client-side and forwarded to the backend via `POST /t` as tracking data. The backend API expects a strict one-to-one mapping of query parameters for search and pagination purposes only.
 
 ---
 
@@ -56,8 +56,10 @@ tags: [security, rate-limiting, cors, authentication]
 #### Rate Limiting Architecture
 
 - **Real-time rate counting**: Enforced by **Google Cloud Armor** at the load balancer level (see INFRA-005 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). Cloud Armor handles per-IP request counting and throttling. This avoids the need for in-memory rate counters in the Go application, which would be lost when Cloud Run instances scale down or restart.
+- **Offense tracking via log sink**: A **Cloud Logging log sink** routes Cloud Armor rate-limit (429) events to a **Cloud Function** (`process-rate-limit-logs`, INFRA-008c). The Cloud Function writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor (which blocks requests before they reach Cloud Run) and the application's progressive banning logic.
 - **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The Go application checks Firestore for ban status on each request and enforces progressive banning tiers.
-- This two-layer approach ensures rate limiting works correctly across Cloud Run auto-scaling events while keeping the infrastructure simple (no Redis/Memorystore needed).
+- **Adaptive protection**: **Cloud Armor Adaptive Protection** is enabled to provide automatic, ML-based escalating DDoS mitigation that complements the application-level progressive banning (see INFRA-005).
+- This multi-layer approach ensures rate limiting works correctly across Cloud Run auto-scaling events while keeping the infrastructure simple (no Redis/Memorystore needed).
 
 #### Application-Level Rate Limiting
 
@@ -81,12 +83,17 @@ tags: [security, rate-limiting, cors, authentication]
 
 **Rate limit response** (`429`):
 
+- Cloud Armor returns the `429` response directly at the load balancer level.
+- A [custom error response](https://cloud.google.com/armor/docs/custom-error-responses) is configured in Cloud Armor (INFRA-005) to return the following JSON body:
+
 ```json
 {
   "error": "Too many requests. Please try again later.",
   "retry_after": 30
 }
 ```
+
+- Note: The frontend (FE-COMP-003) matches 429 responses by HTTP status code only and does not depend on the response body format. This ensures graceful handling even if Cloud Armor returns a non-JSON response.
 
 ---
 
@@ -145,6 +152,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 - THE SYSTEM SHALL accept `GET` requests on all endpoints except `POST /t`.
 - THE SYSTEM SHALL accept `POST` requests only on the `/t` endpoint.
+- THE SYSTEM SHALL accept `OPTIONS` requests on all endpoints for CORS preflight handling. `OPTIONS` requests SHALL return appropriate CORS headers and SHALL NOT be subject to rate limiting.
 - WHEN any other HTTP method is used on any endpoint, THE SYSTEM SHALL return HTTP `405` with an appropriate `Allow` header.
 
 ---
@@ -212,7 +220,7 @@ Standard 404 response — indistinguishable from a normal "not found" to the cli
 
 Security headers SHALL be applied on **both** the frontend (Firebase Hosting) and the backend (Cloud Run), with context-appropriate values for each.
 
-#### Backend API Headers (`api.tjmonserrat.com`)
+#### Backend API Headers (`api.tjmonsi.com`)
 
 The backend SHALL include the following headers on all API responses:
 
@@ -227,13 +235,13 @@ The backend SHALL include the following headers on all API responses:
 
 > **Note**: The backend CSP is `default-src 'none'` because API responses (JSON, markdown, XML) do not load sub-resources, execute scripts, or render HTML. A restrictive CSP on the API prevents any unexpected content execution.
 
-#### Frontend Headers (`tjmonserrat.com`)
+#### Frontend Headers (`tjmonsi.com`)
 
 The frontend SHALL include the following headers via Firebase Hosting `firebase.json` headers configuration:
 
 | Header                         | Value                                                     |
 | ------------------------------ | --------------------------------------------------------- |
-| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonserrat.com; img-src 'self' data:; font-src 'self'` |
+| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data:; font-src 'self'` |
 | `X-Content-Type-Options`       | `nosniff`                                                 |
 | `X-Frame-Options`              | `DENY`                                                    |
 | `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`                     |
@@ -258,7 +266,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
           { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
           { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
           { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonserrat.com; img-src 'self' data:; font-src 'self'" }
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data:; font-src 'self'" }
         ]
       }
     ]
@@ -270,11 +278,12 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 ### SEC-006: CORS
 
-- THE SYSTEM SHALL configure CORS headers since the frontend (`tjmonserrat.com`) and backend (`api.tjmonserrat.com`) are on different origins.
-- Allowed origin: `https://tjmonserrat.com` (and staging equivalents)
-- Allowed methods: `GET, POST`
-- Allowed headers: `Content-Type, Accept, Authorization`
+- THE SYSTEM SHALL configure CORS headers since the frontend (`tjmonsi.com`) and backend (`api.tjmonsi.com`) are on different origins.
+- Allowed origin: `https://tjmonsi.com` (and staging equivalents)
+- Allowed methods: `GET, POST, OPTIONS`
+- Allowed headers: `Content-Type, Accept, Authorization, If-None-Match, If-Modified-Since`
 - Max age: `86400` (1 day)
+- `OPTIONS` preflight requests SHALL return the CORS headers and SHALL NOT be subject to rate limiting.
 
 ---
 

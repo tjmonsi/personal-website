@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 1.3
+version: 1.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -39,8 +39,14 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
     "message": "No article with slug 'invalid-slug'",
     "stack": "..."
   },
+  "labels": {
+    "masked_500": true
+  },
   "cloud_run_instance": "instance-abc123"
 }
+```
+
+> **Note on `labels`**: The `labels` field is included only when applicable. When an internal server error is masked as a 404 response, the log entry MUST include `"masked_500": true` in the `labels` object. This label is used by OBS-005 alerting to detect masked 500 errors.
 ```
 
 **Log Levels**:
@@ -61,6 +67,33 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 - Internal error masked as 404 (ERROR): full error details
 - Database query errors (ERROR): query details (sanitized), error message
 - Slow queries > 1 second (WARNING): query details, duration
+
+---
+
+### OBS-001a: Structured Logging (Cloud Functions)
+
+**Purpose**: Ensure Cloud Functions (sitemap generation and rate-limit log processing) produce structured, queryable logs consistent with the backend logging approach.
+
+**Format**: JSON structured logs to stdout (Cloud Functions automatically ingests into Cloud Logging).
+
+**Logging Requirements for `generate-sitemap` (INFRA-008a)**:
+
+| Event                          | Level   | Details                                    |
+| ------------------------------ | ------- | ------------------------------------------ |
+| Generation started             | INFO    | Trigger source, timestamp                  |
+| URLs processed                 | INFO    | Count of URLs included in sitemap          |
+| Firestore write result         | INFO    | Success/failure, document ID               |
+| Generation duration            | INFO    | Total processing time in ms                |
+| Generation error               | ERROR   | Error type, message, stack trace           |
+
+**Logging Requirements for `process-rate-limit-logs` (INFRA-008c)**:
+
+| Event                          | Level   | Details                                    |
+| ------------------------------ | ------- | ------------------------------------------ |
+| Log entry received             | INFO    | Client IP (sanitized), timestamp           |
+| Offense recorded               | WARNING | Client IP, offense count, endpoint         |
+| Ban applied                    | WARNING | Client IP, ban tier, expiry                |
+| Processing error               | ERROR   | Error type, message, stack trace           |
 
 ---
 
@@ -142,10 +175,18 @@ const speedInfo = connection ? {
 | ------------------------------ | --------- | ------------------------- | ------------------------------ |
 | `api_requests_total`           | Counter   | method, path, status      | Total API request count        |
 | `api_request_duration_ms`      | Histogram | method, path              | Request latency distribution   |
-| `api_rate_limit_hits_total`    | Counter   | path                      | Rate limit triggers (from Cloud Armor logs) |
 | `api_bans_active`              | Gauge     | ban_tier                  | Currently active bans          |
 | `db_query_duration_ms`         | Histogram | collection, operation     | Database query latency         |
 | `db_connection_pool_active`    | Gauge     | —                         | Active DB connections          |
+
+**Cloud Armor Metrics** (sourced from Cloud Monitoring, not application-level):
+
+| Metric                                          | Source          | Description                                |
+| ------------------------------------------------ | --------------- | ------------------------------------------ |
+| `cloud_armor/request_count` (blocked_by_policy)  | Cloud Monitoring | Rate limit blocks by Cloud Armor           |
+| `cloud_armor/request_count` (allowed/denied)     | Cloud Monitoring | Overall Cloud Armor request decisions      |
+
+> **Note**: Rate limit hit counting is handled by Cloud Armor at the infrastructure level. The application does not have visibility into rate-limited requests (they never reach Cloud Run). Use Cloud Monitoring to query Cloud Armor metrics for rate-limit monitoring and alerting.
 
 **Built-in Cloud Run Metrics** (automatic):
 
@@ -169,8 +210,9 @@ const speedInfo = connection ? {
 | Masked 500 errors               | Any ERROR log with "masked_500" label        | Email / Slack        | Critical |
 | Database connection failure     | db_connection_pool_active = 0                | Email / Slack / PagerDuty | Critical |
 | Cloud Run memory pressure       | Memory utilization > 80% over 5 min          | Email / Slack        | Warning  |
-| High rate limit triggers        | rate_limit_hits > 100 in 5 min               | Email / Slack        | Warning  |
+| High rate limit triggers        | Cloud Armor `blocked_by_policy` count > 100 in 5 min (via Cloud Monitoring) | Email / Slack | Warning |
 | Indefinite ban applied          | Log entry for indefinite ban                 | Email               | Info     |
+| Sitemap generation failure      | ERROR log from `generate-sitemap` Cloud Function | Email / Slack    | Warning  |
 
 ---
 
@@ -217,7 +259,7 @@ Allow: /
 Disallow: /t
 Crawl-delay: 5
 
-Sitemap: https://tjmonserrat.com/sitemap.xml
+Sitemap: https://tjmonsi.com/sitemap.xml
 ```
 
 **Sitemap Generation**:
@@ -226,8 +268,8 @@ Sitemap: https://tjmonserrat.com/sitemap.xml
 - The `GET /sitemap.xml` API endpoint serves the sitemap from Firestore (see BE-API-011 in [03-backend-api-specifications.md](03-backend-api-specifications.md)).
 
 **Notes**:
-- The `robots.txt` is served from the frontend domain (`tjmonserrat.com`).
-- API-only paths (`api.tjmonserrat.com`) are on a separate subdomain. A separate `robots.txt` SHALL be served on `api.tjmonserrat.com` via `BE-API-012` (see [03-backend-api-specifications.md](03-backend-api-specifications.md)):
+- The `robots.txt` is served from the frontend domain (`tjmonsi.com`).
+- API-only paths (`api.tjmonsi.com`) are on a separate subdomain. A separate `robots.txt` SHALL be served on `api.tjmonsi.com` via `BE-API-012` (see [03-backend-api-specifications.md](03-backend-api-specifications.md)):
 
 ```
 User-agent: *

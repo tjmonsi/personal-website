@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.3
+version: 1.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -104,11 +104,11 @@ tags: [frontend, nuxt4, vue3, spa]
   - Sticky/fixed position while scrolling
 - THE SYSTEM SHALL display a citation section with a format selector:
   - The user SHALL be able to select from multiple citation formats:
-    - **APA**: `Monserrat, T.J. (2025). Article Title. tjmonserrat.com. https://tjmonserrat.com/technical/slug.md`
-    - **MLA**: `Monserrat, TJ. "Article Title." tjmonserrat.com, 15 Jan. 2025, https://tjmonserrat.com/technical/slug.md.`
-    - **Chicago**: `Monserrat, TJ. "Article Title." tjmonserrat.com. January 15, 2025. https://tjmonserrat.com/technical/slug.md.`
+    - **APA**: `Monserrat, T.J. (2025). Article Title. tjmonsi.com. https://tjmonsi.com/technical/slug.md`
+    - **MLA**: `Monserrat, TJ. "Article Title." tjmonsi.com, 15 Jan. 2025, https://tjmonsi.com/technical/slug.md.`
+    - **Chicago**: `Monserrat, TJ. "Article Title." tjmonsi.com. January 15, 2025. https://tjmonsi.com/technical/slug.md.`
     - **BibTeX**: BibTeX entry for academic use
-    - **IEEE**: `[N] T.J. Monserrat, "Article Title," tjmonserrat.com, Jan. 15, 2025. [Online]. Available: https://tjmonserrat.com/technical/slug.md`
+    - **IEEE**: `[N] T.J. Monserrat, "Article Title," tjmonsi.com, Jan. 15, 2025. [Online]. Available: https://tjmonsi.com/technical/slug.md`
   - WHEN the user clicks the citation text, THE SYSTEM SHALL copy the selected citation format to the clipboard.
   - THE SYSTEM SHALL display a confirmation message (e.g., "Citation copied to clipboard") after copying.
 - THE SYSTEM SHALL provide a "Save for offline reading" button.
@@ -239,7 +239,7 @@ tags: [frontend, nuxt4, vue3, spa]
   - **Your Rights**: Users may contact TJ Monserrat to request information about or deletion of any data associated with their IP address.
   - **Contact**: Link to the socials/contact page (`/socials`) for inquiries.
   - **Changes to This Policy**: Notice that the policy may be updated, with the last updated date displayed.
-- THE SYSTEM SHALL link the privacy policy from the site footer on all pages.
+- THE SYSTEM SHALL link the privacy policy from the site footer on all pages (see FE-COMP-010).
 
 ---
 
@@ -280,6 +280,9 @@ tags: [frontend, nuxt4, vue3, spa]
 | 404         | "The content you're looking for doesn't exist or has been removed."                              |
 | 405         | "This action is not supported."                                                                  |
 | 429         | "You're making too many requests. Please wait a moment and try again."                           |
+
+- **429 handling note**: The frontend SHALL match 429 responses by HTTP status code only. It SHALL NOT attempt to parse or depend on the response body for 429 responses, because Cloud Armor generates these responses at the load balancer level and the body format may not be JSON (see CLR-042, INFRA-005 custom error response configuration).
+
 | 503         | "The service is temporarily unavailable. Please try again later."                                |
 | 504         | "TJ has been notified about the server taking too long." + randomized funny message (see below)  |
 | Other       | "Something went wrong. TJ has been notified of this issue."                                      |
@@ -347,7 +350,7 @@ tags: [frontend, nuxt4, vue3, spa]
 
 **Requirements**:
 
-- THE SYSTEM SHALL serve a `robots.txt` file at the root of the frontend domain (`tjmonserrat.com`).
+- THE SYSTEM SHALL serve a `robots.txt` file at the root of the frontend domain (`tjmonsi.com`).
 - THE SYSTEM SHALL deploy `robots.txt` as a static file in Firebase Hosting's `public/` directory, served directly without any rewrite.
 - THE SYSTEM SHALL specify crawl rules and rate limits for bots.
 - THE SYSTEM SHALL block crawlers from tracking endpoints.
@@ -424,6 +427,19 @@ tags: [frontend, nuxt4, vue3, spa]
     - "At this point, I think you're just testing me."
   - THE SYSTEM SHALL reset the repeated search counter when the user submits a different search query that returns results.
 - Empty result messages SHALL be hardcoded in the frontend (no API call needed).
+
+---
+
+#### FE-COMP-010: Site Footer
+
+**Requirements**:
+
+- THE SYSTEM SHALL display a global site footer on all pages.
+- THE SYSTEM SHALL include the following elements in the footer:
+  - A link to the privacy policy page (`/privacy`) (see FE-PAGE-009).
+  - A copyright notice: `© TJ Monserrat`.
+  - A link to the socials page (`/socials`).
+- THE SYSTEM SHALL render the footer consistently across desktop, tablet, and mobile viewports.
 
 ---
 
