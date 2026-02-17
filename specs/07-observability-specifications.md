@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 2.1
+version: 2.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -29,7 +29,7 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
   "method": "GET",
   "path": "/technical",
   "query_params": "q=example&page=1",
-  "client_ip": "203.0.113.42",
+  "client_ip": "203.0.113.0",
   "user_agent": "Mozilla/5.0...",
   "status_code": 404,
   "latency_ms": 235,
@@ -120,6 +120,17 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 | Sync duration                  | INFO    | Total processing time in ms                |
 | Gemini API error               | ERROR   | Error type, message, article ID            |
 | Sync error                     | ERROR   | Error type, message, stack trace           |
+
+**Logging Requirements for `cleanup-rate-limit-offenders` (INFRA-008d)**:
+
+| Event                          | Level   | Details                                    |
+| ------------------------------ | ------- | ------------------------------------------ |
+| Cleanup started                | INFO    | Trigger source, timestamp                  |
+| Records evaluated              | INFO    | Total records scanned                      |
+| Records deleted                | INFO    | Count of expired records removed           |
+| Records retained               | INFO    | Count of records kept (active bans, indefinite bans) |
+| Cleanup duration               | INFO    | Total processing time in ms                |
+| Cleanup error                  | ERROR   | Error type, message, stack trace           |
 
 ---
 
@@ -253,6 +264,7 @@ const speedInfo = connection ? {
 | Sitemap generation failure      | ERROR log from `generate-sitemap` Cloud Function | Email / Slack    | Warning  |
 | Gemini embedding API failure    | ERROR log from embedding API call (Cloud Run or Cloud Function) | Email / Slack | Warning |
 | Embedding sync failure          | ERROR log from `sync-article-embeddings` Cloud Function | Email / Slack | Warning |
+| Offender cleanup failure        | ERROR log from `cleanup-rate-limit-offenders` Cloud Function | Email / Slack | Warning |
 | High embedding cache miss rate  | `embedding_cache_misses_total` > 50 in 5 min | Email               | Info     |
 
 ---

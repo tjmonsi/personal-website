@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.1
+version: 2.2
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -21,11 +21,13 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Backend API    | Go                                     | Google Cloud Run (asia-southeast1)       |
 | Sitemap Gen    | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
 | Log Processing | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
+| Offender Cleanup | Node.js (Cloud Functions Gen 2)      | Google Cloud Functions (asia-southeast1) |
+| Embedding Sync | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
 | Database       | Firestore Enterprise (MongoDB compatibility mode) | Google Cloud (asia-southeast1)  |
 | Vector Search  | Firestore Native Mode                  | Google Cloud (asia-southeast1)           |
 | Embedding      | Vertex AI — Gemini `gemini-embedding-001` | Google Cloud (asia-southeast1)           |
 | CDN / WAF      | Google Cloud Load Balancer + Cloud Armor | Google Cloud                           |
-| Networking     | VPC with Private Google Access (Production only) | Google Cloud (asia-southeast1)           |
+| Networking     | VPC with Private Google Access + Direct VPC Egress (Production only) | Google Cloud (asia-southeast1)           |
 | Scheduling     | Google Cloud Scheduler                 | Google Cloud (asia-southeast1)           |
 | Observability  | Google Cloud Logging + Cloud Monitoring + BigQuery | Google Cloud                |
 | Analytics      | Looker Studio                          | Google Cloud (owner-operated)            |
@@ -40,7 +42,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Cloud Run                       | Google Cloud's serverless container hosting platform |
 | Cloud Armor                     | Google Cloud's WAF and DDoS protection service |
 | Firebase Functions              | Cloud Functions integrated with Firebase, used here to serve the Nuxt 4 SPA |
-| Cloud Functions Gen 2           | Google Cloud's second-generation serverless functions platform, built on Cloud Run infrastructure. Used here for internal sitemap generation and Cloud Armor log processing. |
+| Cloud Functions Gen 2           | Google Cloud's second-generation serverless functions platform, built on Cloud Run infrastructure. Used here for internal sitemap generation, Cloud Armor log processing, rate limit offender cleanup, and article embedding synchronization. |
 | Log Sink                        | A Cloud Logging export mechanism that routes matching log entries to a destination (e.g., Pub/Sub, Cloud Function) for further processing. Used here to route Cloud Armor rate-limit events to a Cloud Function. |
 | Cloud Armor Adaptive Protection | A Cloud Armor feature that uses machine learning to detect and mitigate L7 DDoS attacks automatically, providing escalating protection without manual rule configuration. |
 | VPC                             | Virtual Private Cloud — isolated network environment for Google Cloud resources. Used in Production only; Development does not use a VPC to reduce cost. |
@@ -113,6 +115,18 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
                          │  │  Rate Limit Log Processing │  │
                          │  │  (Node.js) → writes to DM-009 │
                          │  └────────────────────────────┘  │
+                         │                                   │
+                         │  ┌────────────────────────────┐  │
+Cloud Scheduler ────────▶│  │  Cloud Function (Gen 2)    │  │
+                         │  │  Offender Cleanup (daily)  │  │
+                         │  │  (Node.js) → cleans DM-009 │  │
+                         │  └────────────────────────────┘  │
+                         │                                   │
+                         │  ┌────────────────────────────┐  │
+Content CI/CD ──────────▶│  │  Cloud Function (Gen 2)    │  │
+                         │  │  Embedding Sync            │  │
+                         │  │  (Node.js) → syncs vectors │  │
+                         │  └────────────────────────────┘  │
                          └──────────────────────────────────┘
 
               ┌──────────────────────────────────┐
@@ -159,7 +173,7 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 | AD-008 | Content managed via separate Git repository    | Articles and content are maintained in a dedicated repo; a CI/CD pipeline pushes content to the database on merge. Keeps the public API read-only. |
 | AD-009 | Frontend SPA with offline reading support      | Not installable as PWA, but supports offline reading via smart prefetching and manual article saving in the browser |
 | AD-010 | Free-form categories derived from articles     | Categories are stored in a dedicated collection and synced from article metadata. Frontend caches categories in sessionStorage for 24 hours. |
-| AD-011 | VPC with Private Google Access (Production only) | In Production, Cloud Run and Cloud Functions connect to Firestore via VPC, restricting egress to Google Cloud APIs only. No NAT router needed — minimizes cost and attack surface. The Development environment does NOT use a VPC to reduce cost; services connect to Google Cloud APIs directly. |
+| AD-011 | VPC with Private Google Access and Direct VPC Egress (Production only) | In Production, Cloud Run and Cloud Functions use Direct VPC Egress to route traffic through the VPC, restricting egress to Google Cloud APIs only. Direct VPC Egress requires no separate connector instances, reducing cost versus Serverless VPC Access Connectors. No NAT router needed — minimizes cost and attack surface. The Development environment does NOT use a VPC to reduce cost; services connect to Google Cloud APIs directly. Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc |
 | AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Node.js), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 | AD-014 | Cloud Function for offense tracking from Cloud Armor logs | A log sink routes Cloud Armor rate-limit (429) events to a Cloud Function, which writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor's request-level rate limiting and the application's progressive banning logic. |
@@ -176,10 +190,12 @@ Cloud Armor Log Sink ───▶│  │  Cloud Function (Gen 2)    │  │
 - **Region (Firestore)**: `asia-southeast1`
 - **Region (Cloud Run)**: `asia-southeast1`
 - **Domain**: `tjmonsi.com` (frontend), `api.tjmonsi.com` (backend API)
-- **VPC** (Production only): `personal-website-vpc` in `asia-southeast1` with minimum subnets for Cloud Run and Cloud Functions connectors. Private Google Access enabled; no NAT router. The Development environment does NOT use a VPC to reduce cost.
+- **VPC** (Production only): `personal-website-vpc` in `asia-southeast1` with a `/28` subnet for Cloud Run and Cloud Functions Direct VPC Egress. Private Google Access enabled; no NAT router, no Serverless VPC Access Connector. Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc. The Development environment does NOT use a VPC to reduce cost.
 - **Cloud Run**: Min instances = 0 (scale to zero), Max instances = TBD based on budget
 - **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
 - **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink in `asia-southeast1`
+- **Cloud Functions**: Rate limit offender cleanup function (Gen 2, Node.js) triggered by Cloud Scheduler daily in `asia-southeast1`
+- **Cloud Functions**: Embedding sync function (Gen 2, Node.js) triggered by Content CI/CD pipeline to sync content embeddings to Firestore Native in `asia-southeast1`
 - **BigQuery**: Dataset `website_logs` in `asia-southeast1` with 5 tables fed by Cloud Logging log sinks (see INFRA-010)
 - **Looker Studio**: Owner-operated analytics dashboards connected to BigQuery via service account (see INFRA-011)
 - **Firebase Hosting**: Global CDN distribution for static assets

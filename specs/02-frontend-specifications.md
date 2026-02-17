@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 1.8
+version: 1.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -30,6 +30,10 @@ tags: [frontend, nuxt4, vue3, spa]
 | Hash Fragment    | The portion of a URL after the `#` symbol (e.g., `#section-title`), used to identify and link to a specific section within a page |
 | Deep Link        | A URL that encodes enough state to restore a specific view, including active search terms, applied filters, and current page |
 | Heading Slug     | A URL-safe string derived from heading text by converting to lowercase, replacing spaces with hyphens, and removing special characters (e.g., "My Section Title" → `my-section-title`) |
+| `visitor_session_id` | A random UUID v4 generated per browser session, stored in `sessionStorage`. Used to correlate tracking events within a single visit. Not linked to any real-world identity and not persisted across sessions. |
+| `visitor_id`     | A SHA-256 hash computed server-side from `visitor_session_id` + truncated IP + User-Agent. A non-reversible, session-scoped identifier for unique visitor counting and bot discrimination. |
+| Link Click Tracking | Fire-and-forget anonymous tracking of anchor element clicks, sent via `navigator.sendBeacon()` to `POST /t`. |
+| Time-on-Page Milestone | An engagement signal sent when a user remains on a page for 1, 2, or 5 minutes of active foreground time. Only foreground time counts (uses Page Visibility API). |
 
 ---
 
@@ -270,7 +274,7 @@ tags: [frontend, nuxt4, vue3, spa]
   - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited, links are clicked, and engagement milestones are reached. Client-side error reporting for performance monitoring. A random session identifier is generated in your browser for each visit and is not stored after you close the tab. No cookies, session tracking, or third-party scripts are used.
   - **Purpose of Data Collection**: Understanding how helpful and engaging the site's content is to readers, monitoring site performance, improving user experience, identifying which content resonates with visitors, and discriminating between real human visitors and automated bots or scrapers that collect text without reading it. The engagement data (time on page, link clicks) helps the site owner understand whether content is genuinely useful rather than just visited.
   - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond truncated IP and browser information, no cross-session tracking (i.e., we cannot recognize you on a return visit), no third-party tracking scripts, no advertising data.
-  - **Data Retention**: Visitor tracking data and error reports are stored as anonymized log entries in Google BigQuery for long-term analytics and trend analysis. This data is automatically deleted after 2 years. The same anonymization (IP truncation) applies — no full IP addresses are stored in BigQuery. No tracking or error report data is stored in the application database.
+  - **Data Retention**: Visitor tracking data and error reports are stored as anonymized log entries in Google BigQuery for long-term analytics and trend analysis. This data is automatically deleted after 2 years. The same anonymization (IP truncation) applies — no full IP addresses are stored in BigQuery. No tracking or error report data is stored in the application database. Infrastructure-level load balancer logs (used for DDoS analysis and security incident response) may retain full IP addresses for up to 90 days; these logs are not used in analytics reports.
   - **Analytics**: The website owner uses Looker Studio dashboards connected to BigQuery to view aggregate analytics (e.g., unique visitor counts, popular pages, referrer sources, browser distribution). These dashboards are private and not publicly accessible. No data is shared with third parties.
   - **Data Storage**: Data is stored in Google Cloud infrastructure in the `asia-southeast1` region.
   - **Your Rights**: Users may contact TJ Monserrat to request information about or deletion of any data associated with their IP address.

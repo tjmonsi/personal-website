@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 2.3
+version: 2.4
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -90,7 +90,7 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-stu
 | Request timeout      | 30 seconds                      |
 | Startup CPU boost    | Enabled                         |
 | Ingress              | Internal + Cloud Load Balancing |
-| VPC connector        | Connected to `personal-website-vpc` (see INFRA-009) — Production only. Development environment does NOT use a VPC. |
+| VPC egress          | Connected to `personal-website-vpc` via **Direct VPC Egress** (see INFRA-009) — Production only. Development environment does NOT use a VPC. |
 
 **Docker Image**:
 
@@ -278,7 +278,7 @@ ENTRYPOINT ["/server"]
 | Timeout              | 60 seconds                                         |
 | Trigger              | HTTP (invoked by Cloud Scheduler)                  |
 | Ingress              | Internal only (no public access)                   |
-| VPC connector        | Connected to the project VPC (see INFRA-009) — Production only |
+| VPC egress           | Direct VPC Egress (see INFRA-009) — Production only |
 | Authentication       | Requires authentication (OIDC token from Cloud Scheduler service account) |
 
 **Sitemap Generation Logic**:
@@ -325,7 +325,7 @@ ENTRYPOINT ["/server"]
 | Timeout              | 60 seconds                                         |
 | Trigger              | Cloud Logging log sink (via Pub/Sub)               |
 | Ingress              | Internal only (no public access)                   |
-| VPC connector        | Connected to the project VPC (see INFRA-009) — Production only |
+| VPC egress           | Direct VPC Egress (see INFRA-009) — Production only |
 | Authentication       | Service account with Firestore read/write access   |
 
 **Log Sink Configuration**:
@@ -352,6 +352,57 @@ ENTRYPOINT ["/server"]
 
 ---
 
+##### INFRA-008d: Cloud Function — `cleanup-rate-limit-offenders`
+
+**Purpose**: Periodically clean up expired rate limit offender records from the `rate_limit_offenders` Firestore collection (DM-009). Removes records where there is no active ban and no offenses in the last 90 days.
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Function name        | `cleanup-rate-limit-offenders`                     |
+| Runtime              | Node.js (Cloud Functions Gen 2)                    |
+| Region               | `asia-southeast1`                                  |
+| Memory               | 256 MB                                             |
+| Timeout              | 60 seconds                                         |
+| Trigger              | HTTP (invoked by Cloud Scheduler)                  |
+| Ingress              | Internal only (no public access)                   |
+| VPC egress           | Direct VPC Egress (see INFRA-009) — Production only |
+| Authentication       | Requires authentication (OIDC token from Cloud Scheduler service account) |
+
+**Cleanup Logic**:
+
+1. Query all documents in the `rate_limit_offenders` collection (DM-009).
+2. For each document, evaluate:
+   - IF `current_ban` is null or expired (ban `end` date is in the past) AND the most recent entry in `offense_history` is older than 90 days → **delete** the document.
+   - IF `current_ban.tier` is `"indefinite"` → **skip** (retain for periodic manual review).
+3. Log the number of records evaluated, deleted, and retained.
+
+**Notes**:
+- The Cloud Function runs internally only and is NOT accessible from the public internet.
+- Records with indefinite bans are retained and subject to periodic manual review by the website owner.
+- This function is idempotent. Running it multiple times produces the same result.
+
+##### INFRA-008e: Cloud Scheduler — `trigger-cleanup-rate-limit-offenders`
+
+**Configuration**:
+
+| Setting              | Value                                              |
+| -------------------- | -------------------------------------------------- |
+| Job name             | `trigger-cleanup-rate-limit-offenders`             |
+| Schedule             | Daily at 03:00 UTC (`0 3 * * *`)                   |
+| Target               | Cloud Function `cleanup-rate-limit-offenders` (HTTP trigger) |
+| HTTP method          | POST                                               |
+| Authentication       | OIDC token (service account with Cloud Functions invoker role) |
+| Region               | `asia-southeast1`                                  |
+| Retry config         | Max 3 retries with exponential backoff             |
+
+**Notes**:
+- Daily execution is sufficient given the 90-day retention window.
+- Running at 03:00 UTC minimizes overlap with peak traffic (asia-southeast1 timezone).
+
+---
+
 #### INFRA-009: VPC Network (Production Only)
 
 **Purpose**: Provide private networking for Cloud Run and Cloud Functions in the **Production** environment, restricting egress to Google Cloud APIs only. The Development environment does NOT use a VPC to reduce cost; services connect to Google Cloud APIs directly.
@@ -362,20 +413,22 @@ ENTRYPOINT ["/server"]
 | ------------------------ | -------------------------------------------------- |
 | VPC name                 | `personal-website-vpc`                             |
 | Region                   | `asia-southeast1`                                  |
-| Subnet (Cloud Run)       | Minimum subnet (e.g., `/28`) for Cloud Run VPC connector |
-| Subnet (Cloud Functions) | Minimum subnet (e.g., `/28`) for Cloud Functions VPC connector |
+| Subnet (Direct VPC Egress) | `/28` subnet in `asia-southeast1` for Cloud Run and Cloud Functions Direct VPC Egress. Each Cloud Run instance or Cloud Function instance uses one IP address from this subnet. See: [IP address allocation](https://cloud.google.com/run/docs/configuring/shared-vpc-direct-vpc#direct-vpc-ip-allocation) |
 | Private Google Access    | Enabled (allows access to Google Cloud APIs without public IPs) |
 | NAT                      | None (no Cloud NAT router)                         |
 | Firewall rules           | Default deny egress to internet; allow egress to Google Cloud API ranges only |
 
-**VPC Connectors**:
+**Direct VPC Egress**:
 
-- **Cloud Run VPC connector**: Connects the Go backend API (INFRA-003) to the VPC. Enables private access to Firestore Enterprise and other Google Cloud services.
-- **Cloud Functions VPC connector**: Connects the sitemap generation Cloud Function (INFRA-008a) and the log processing Cloud Function (INFRA-008c) to the VPC. Enables private access to Firestore Enterprise.
+- Cloud Run and Cloud Functions Gen 2 SHALL use **Direct VPC Egress** instead of Serverless VPC Access Connectors. Direct VPC Egress provides VPC connectivity without provisioning a separate connector, at no additional cost. Reference: [Direct VPC Egress](https://cloud.google.com/run/docs/configuring/vpc-direct-vpc)
+- **Cloud Run**: The Go backend API (INFRA-003) routes all egress traffic through the VPC via Direct VPC Egress. Enables private access to Firestore Enterprise and other Google Cloud services.
+- **Cloud Functions**: The sitemap generation (INFRA-008a), log processing (INFRA-008c), offender cleanup (INFRA-008d), and embedding sync (INFRA-014) Cloud Functions route all egress traffic through the VPC via Direct VPC Egress.
+- **IP Address Allocation**: Each Cloud Run revision or Cloud Function instance consumes one IP address from the configured subnet during execution. A `/28` subnet provides 16 IP addresses, sufficient for the expected maximum concurrency (Cloud Run max 5 instances + up to 4 Cloud Function instances). Monitor subnet utilization and expand if needed.
+- Reference: [Shared VPC Direct VPC IP Allocation](https://cloud.google.com/run/docs/configuring/shared-vpc-direct-vpc#direct-vpc-ip-allocation)
 
 **Network Policy**:
 
-- Cloud Run and Cloud Functions SHALL route all egress traffic through the VPC in **Production**.
+- Cloud Run and Cloud Functions SHALL route all egress traffic through the VPC via **Direct VPC Egress** in **Production**.
 - Egress SHALL be restricted to Google Cloud API endpoints only (via Private Google Access).
 - No outbound internet access is required — all external dependencies are Google Cloud services.
 - No Cloud NAT router is provisioned to minimize cost and attack surface.
@@ -427,7 +480,8 @@ gcloud firestore indexes composite create \
 | Model                | `gemini-embedding-001`                             |
 | Region               | `asia-southeast1`                                  |
 | Output dimensions    | 2048 (via `output_dimensionality` parameter; default is 3072; 2048 is Firestore Native max) |
-| Task type            | `RETRIEVAL_DOCUMENT` (used for both document indexing and search queries) |
+| Task type (documents)| `RETRIEVAL_DOCUMENT` (used for document/article indexing by the embedding sync function) |
+| Task type (queries)  | `RETRIEVAL_QUERY` (used for search query embedding at runtime by Cloud Run) |
 | Normalization        | L2-normalize all 2048-dimensional vectors before storage (required for non-3072 dimensions) |
 | Authentication       | IAM — service accounts with `roles/aiplatform.user` |
 
@@ -440,7 +494,7 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 
 | Caller                                | Task Type            | Purpose                                    |
 | ------------------------------------- | -------------------- | ------------------------------------------ |
-| Cloud Run (Go API)                    | `RETRIEVAL_DOCUMENT` | Embed search queries on cache miss         |
+| Cloud Run (Go API)                    | `RETRIEVAL_QUERY`    | Embed search queries on cache miss         |
 | `sync-article-embeddings` (INFRA-014) | `RETRIEVAL_DOCUMENT` | Embed article content during sync          |
 
 **Cost Considerations**:
@@ -470,7 +524,7 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 | Timeout              | 300 seconds (5 minutes)                            |
 | Trigger              | HTTP (invoked by content CI/CD pipeline)            |
 | Ingress              | Internal only (no public access)                   |
-| VPC connector        | Connected to the project VPC (see INFRA-009) — Production only |
+| VPC egress           | Direct VPC Egress (see INFRA-009) — Production only |
 | Authentication       | Requires authentication (service account with appropriate roles) |
 
 **Sync Logic**:
@@ -524,7 +578,10 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
 | Sink name        | `sink-cloud-armor-lb`                              |
 | Destination      | BigQuery table `website_logs.cloud_armor_lb_logs`  |
 | Filter           | `resource.type="http_load_balancer"`               |
-| Purpose          | WAF events, rate limiting analysis, traffic patterns |
+| Table expiry     | **90 days** (overrides dataset default of 730 days) |
+| Purpose          | WAF events, rate limiting analysis, DDoS investigation, security incident response |
+
+> **Privacy Note**: Cloud Armor load balancer logs contain **full IP addresses** in the `httpRequest.remoteIp` field. These are generated by Google Cloud infrastructure at the load balancer level before requests reach the Go backend and cannot be truncated at the source. This table uses a 90-day retention period (shorter than the 2-year default) to limit the duration that full IPs are stored. Only the website owner has access to this table. Looker Studio dashboards SHALL NOT query this table for analytics reports — use `frontend_tracking_logs` (which contains truncated IPs) instead. This table is used solely for security investigations and DDoS analysis.
 
 ##### INFRA-010c: Frontend Error Logs
 
@@ -570,7 +627,7 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
 **Data Retention**:
 
 - All tables in the `website_logs` dataset SHALL have a default table expiry of **730 days (2 years)**. Data older than 2 years is automatically deleted by BigQuery.
-- This 2-year retention applies uniformly to all 5 tables. No table retains data indefinitely.
+- This 2-year retention applies to 4 of the 5 tables. The `cloud_armor_lb_logs` table overrides this to 90 days (see INFRA-010b). No table retains data indefinitely.
 - The retention period balances long-term trend analysis with privacy obligations and cost management.
 
 **Data Anonymization in BigQuery**:
@@ -585,7 +642,7 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
 | Table                     | Personal Data Present                         | Anonymization Applied                  | Retention |
 | ------------------------- | --------------------------------------------- | -------------------------------------- | --------- |
 | `all_logs`                | Truncated IP addresses                        | IP last octet zeroed                   | 2 years   |
-| `cloud_armor_lb_logs`     | Truncated IP, User-Agent (browser/OS info)    | IP last octet zeroed by Cloud Armor config | 2 years |
+| `cloud_armor_lb_logs`     | **Full** IP, User-Agent (browser/OS info)     | No IP truncation (infrastructure-generated logs); 90-day retention | 90 days |
 | `frontend_error_logs`     | Truncated IP, browser name/version            | IP last octet zeroed                   | 2 years   |
 | `backend_error_logs`      | Truncated IP (in request context)             | IP last octet zeroed                   | 2 years   |
 | `frontend_tracking_logs`  | Truncated IP, browser, referrer, page visited | IP last octet zeroed                   | 2 years   |
@@ -593,7 +650,7 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
 **Notes**:
 - Log sinks operate independently of the existing Cloud Logging log buckets and the rate-limit log sink (INFRA-008c). They do not interfere with each other.
 - BigQuery tables are partitioned by ingestion time automatically when created by log sinks.
-- The 2-year table expiry is set at the dataset level as the default. Individual tables inherit this expiry unless explicitly overridden (which SHALL NOT be done).
+- The 2-year table expiry is set at the dataset level as the default. Individual tables inherit this expiry unless explicitly overridden. Only the `cloud_armor_lb_logs` table overrides this default to 90 days for privacy reasons (see INFRA-010b).
 
 ---
 
@@ -698,6 +755,11 @@ Cloud Scheduler ───────▶│  │Cloud Function │             �
                         │  ┌───────────────┐             │
 Cloud Armor Log Sink ──▶│  │Cloud Function │             │
                         │  │(Log Proc.)    │             │
+                        │  └───────────────┘             │
+                        │                                │
+                        │  ┌───────────────┐             │
+Cloud Scheduler ───────▶│  │Cloud Function │             │
+                        │  │(Cleanup)      │             │
                         │  └───────────────┘             │
                         │                                │
                         │  ┌───────────────┐             │

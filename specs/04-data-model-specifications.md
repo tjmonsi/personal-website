@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 1.8
+version: 1.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -214,7 +214,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 
 - THE SYSTEM SHALL remove offense records where there is no active ban (`current_ban` is null or expired) and no offenses in the last 90 days.
 - Offense records with indefinite bans SHALL be retained but subject to periodic manual review.
-- A scheduled cleanup (e.g., via a Cloud Scheduler job or application-level TTL check) SHALL enforce this retention policy.
+- A daily Cloud Scheduler job triggers the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d/008e) to enforce this retention policy.
 
 ---
 
@@ -257,6 +257,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 - No search strings or query text is stored anywhere in this collection.
 - No TTL / no cache expiration. Cached embeddings persist indefinitely.
 - The embedding model version (`gemini-embedding-001`) is implicit. If the model is upgraded, the cache must be invalidated (cleared) to regenerate embeddings with the new model.
+- The cache stores embeddings generated with `task_type=RETRIEVAL_QUERY`. If the task type is changed, the cache must be invalidated (cleared) to regenerate embeddings with the correct task type.
 
 **UUID v5 Generation**:
 ```

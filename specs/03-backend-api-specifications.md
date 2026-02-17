@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 1.9
+version: 2.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -176,7 +176,7 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 2. **Generate cache key**: Compute UUID v5 from the lowercased query using the URL namespace (`6ba7b811-9dad-11d1-80b4-00c04fd430c8`) and the lowercased query as the name.
 3. **Check embedding cache**: Look up the UUID in the `embedding_cache` collection (DM-011) in Firestore Enterprise.
    - **Cache hit**: Use the cached embedding vector.
-   - **Cache miss**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_DOCUMENT` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before storage. Store the UUID and normalized vector in the `embedding_cache` collection (no search string stored). No cache expiration.
+   - **Cache miss**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_QUERY` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before storage. Store the UUID and normalized vector in the `embedding_cache` collection (no search string stored). No cache expiration.
 4. **Vector search**: Query the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors` — see DM-012) using the embedding vector with `findNearest()` (cosine distance). Exclude results with cosine distance > **0.35** (configurable threshold — see AD-020).
 5. **Apply filters**: If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), query Firestore Enterprise with the candidate document IDs from step 4 AND the filter criteria applied. If no filters, retrieve full documents from Firestore Enterprise by document IDs.
 6. **Sort**: Sort results by cosine distance ascending (most similar first).
