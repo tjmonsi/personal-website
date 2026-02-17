@@ -21,7 +21,7 @@ Search engines fetch sitemaps from the URL declared in `robots.txt`. If that URL
 - **C**: Other approach.
 
 **Answer**:
-
+Use B.
 
 ---
 
@@ -41,7 +41,7 @@ The backend **cannot populate `X-RateLimit-Remaining`** because it doesn't track
 - **D**: Other approach.
 
 **Answer**:
-
+Let's use A.
 
 ---
 
@@ -62,7 +62,7 @@ Additionally, Nuxt 4's SPA build output may inline scripts, which would require 
 - **C**: Other approach.
 
 **Answer**:
-
+Use B. Put a link on how to set CSP, `X-Frame-Options`, and `Referrer-Policy` setting on firebase.json so I can understand.
 
 ---
 
@@ -82,7 +82,7 @@ A single Cloud Armor rule at 120 req/min does not differentiate between user typ
 - **D**: Other approach.
 
 **Answer**:
-
+Use A.
 
 ---
 
@@ -101,7 +101,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **C**: **Allowlist** specific common parameters (UTM, fbclid, gclid, etc.) in addition to the API's own parameters.
 
 **Answer**:
-
+Let's use B. Because what it is being shared is the frontend URL (which should be tjmonsi.com not tjmonserrat.com). The API backend (which is api.tjmonsi.com) is not the one being shared. Additional query parameters in the frontend URL that are not part of the query for backend (which should be one-to-one mapping for the search query or pagination part), will be posted to `/t` as tracking parameters.
 
 ---
 
@@ -117,7 +117,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **B**: No — keep `.md` in citation URLs and update the backend spec instead.
 
 **Answer**:
-
+Both frontend and backend SHOULD use the `.md` format at the end. This should look like that they are accessing a `.md` file but it is actually a frontend URL that loads a backend API from database rather than just reading a file.
 
 ---
 
@@ -133,7 +133,17 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **B**: No — restructure the global rule differently.
 
 **Answer**:
-
+Yes. The non-JSON endpoints for backend are the following:
+- `/sitemap.xml` is `application/xml`
+- `/health` is `application/json`
+- `/` is `text/markdown`
+- `/technical/(slug).md` is `text/markdown`
+- `/technical` is `application/json`
+- `/blog` is `application/json`
+- `/blog/(slug).md` is `text/markdown`
+- `/socials` is `application/json`
+- `/others` is `application/json`
+- `/t` is `application/json` (accepts `application/json`)
 
 ---
 
@@ -151,7 +161,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **D**: Other approach.
 
 **Answer**:
-
+Use A for backend.
 
 ---
 
@@ -168,7 +178,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **C**: Add a privacy notice as a footer link/banner rather than a full page.
 
 **Answer**:
-
+Use A. Draft a generic privacy page for me to review
 
 ---
 
@@ -184,7 +194,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **B**: No — handle this at the infrastructure level (e.g., Cloud Run serving a static file).
 
 **Answer**:
-
+Use A.
 
 ---
 
@@ -201,7 +211,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **C**: Add a Cloud Armor rule to block `/internal/*` paths from public traffic, and add a minimal spec entry.
 
 **Answer**:
-
+Let's use a Cloud Function to do this instead of Cloud Run. Have the Cloud Function run only internally.
 
 ---
 
@@ -217,7 +227,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **B**: No — leave as-is.
 
 **Answer**:
-
+frontend should use `.md` as well.
 
 ---
 
@@ -234,7 +244,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **C**: Other.
 
 **Answer**:
-
+Use A.
 
 ---
 
@@ -251,7 +261,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **C**: Application-level check (inspect request source headers to verify it's from the Cloud Run health checker).
 
 **Answer**:
-
+Use A.
 
 ---
 
@@ -268,7 +278,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **C**: Use the existing catch-all — no specific 403 mapping needed.
 
 **Answer**:
-
+Use B.
 
 ---
 
@@ -284,7 +294,7 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **B**: Leave as-is — the catch-all handles it, and 504s should be extremely rare.
 
 **Answer**:
-
+A. But change it to a human-readable message where it says that I am already informed about the server taking too long. And then add a funny message about it taking too long. Make it randomized as well.
 
 ---
 
@@ -301,4 +311,8 @@ When URLs are shared on social media, email campaigns, or analytics tools, they 
 - **C**: Remove the `slug` field and unique index entirely — use MongoDB's `_id` as the document identifier.
 
 **Answer**:
+This is a misconception. There should not be a `GET /others/{slug}.md` because in the frontend, when the user clicks to a link in the list, they will be taken to another website.
+---
 
+## Other notes
+- Add a VPC and minimum subnet for Cloud Run and minimum subnet for Cloud Functions on asia-southeast1 and then have it allow to connect to GCP APIs only. No NAT router as of the moment.
