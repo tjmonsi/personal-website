@@ -25,7 +25,7 @@ However, BE-API-009 and SEC-003A require every `POST /t` request to include an `
 **Option C**: Use `fetch()` with `keepalive: true` as the primary mechanism (with `Authorization` header), and fall back to `sendBeacon()` without authentication only when `fetch` with `keepalive` is unavailable. Document the fallback behavior and accept that unauthenticated `sendBeacon` requests will be rejected by the backend (graceful data loss for very old browsers).
 
 **Answer**:
-
+Use Option B so that we can use navigator.sendBeacon. Then have a progressive default to use fetch if navigator.sendBeacon is not available
 ---
 
 ## CLR-104: Frontend CSP `img-src` May Block External Images in Rendered Markdown Articles 🟢
@@ -48,7 +48,7 @@ This may be intentional (articles are text-only) or an oversight.
 **Option C**: Broaden `img-src` to a specific allowlisted domain (e.g., a Cloud Storage bucket or GitHub raw content): `img-src 'self' data: https://storage.googleapis.com`. This is more restrictive than Option B while allowing hosted images.
 
 **Answer**:
-
+Use a mix of A and C. Allow inline `data:` URIs or iamges hosted on `tjmonsi.com` and `api.tjmonsi.com` where there will be an addition of a endpoint called `/images` and it any `path-name` under that will source the image from a Cloud storage that holds the image which will be sent dynamically via the Go server as bytes. Add this in the spec. Have a caching mechanism in the Go server on that endpoint so that it will not always get the image in Cloud storage for the next 30 days. Name the cloud storage as `<project-id>-media-bucket`.
 ---
 
 ## Summary
@@ -59,3 +59,9 @@ This may be intentional (articles are text-only) or an oversight.
 | CLR-104 | 🟢 SUGGESTION | Security / Content | Frontend CSP `img-src` may block external images in rendered markdown articles |
 
 ````
+
+## Additional Notes:
+- Make the Cloud storage name for to save the terraform state be `<project-id>-terraform-state`
+- Changes on Frontend that will require a refresh from the service worker will show a snackbar that a new version of the website is ready for the person with a changelog link to another static page called `/changelog` which will show the updates in the frontend only. There's also a button in the snackbar to refresh now if they want to refresh now and install the new service worker. Lastly, the message will be shown longer up to 20 seconds. All snackbar reports will have a default of 10 seconds before it disappears. Add this in the spec as well.
+- All links are in the header navigation of the website and footer. If in mobile, it should be a hamburger menu in the left header and will slide in from the left when clicked.
+- In the spec, add acceptance criteria.
