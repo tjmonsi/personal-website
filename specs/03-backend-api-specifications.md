@@ -1,10 +1,10 @@
 ---
 title: Backend API Specifications
-version: 2.5
+version: 2.6
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
-tags: [backend, api, go, cloud-run]
+tags: [backend, api, go, cloud-run, breadcrumbs]
 ---
 
 ## Backend API Specifications
@@ -200,6 +200,17 @@ type Breadcrumb struct {
   ]
 }
 ```
+
+**BE-BREADCRUMB Component Acceptance Criteria**:
+
+- **AC-BREADCRUMB-001**: Given an incoming HTTP request, when the middleware initializes, then a new breadcrumb collector is created and attached to the request's `context.Context` with a pre-allocated slice of capacity 50.
+- **AC-BREADCRUMB-002**: Given a breadcrumb collector with 50 entries, when a new breadcrumb is recorded, then the oldest entry is evicted (FIFO) and the new entry is appended.
+- **AC-BREADCRUMB-003**: Given any function in the request call chain, when it calls the breadcrumb recording API, then it can retrieve the collector from `context.Context` without an additional parameter.
+- **AC-BREADCRUMB-004**: Given a request that completes successfully (no error), when the response is sent, then the breadcrumb buffer is discarded and no breadcrumb data is logged.
+- **AC-BREADCRUMB-005**: Given a request that results in an internal error, when the error log entry is emitted, then it includes a `server_breadcrumbs` array with all breadcrumb entries recorded during processing.
+- **AC-BREADCRUMB-006**: Given a database query breadcrumb, when the entry is recorded, then filter field **names** (keys) are present but filter **values** are NOT (privacy constraint).
+- **AC-BREADCRUMB-007**: Given a breadcrumb entry, when it records a client IP address, then the IP is truncated (last octet zeroed for IPv4, last 80 bits zeroed for IPv6).
+- **AC-BREADCRUMB-008**: Given breadcrumb recording overhead, when measured under normal conditions, then the total added latency does not exceed 1 millisecond per request.
 
 #### Response Format
 

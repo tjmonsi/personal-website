@@ -1,10 +1,10 @@
 ---
 title: Observability Specifications
-version: 2.9
+version: 3.0
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-18
 owner: TJ Monserrat
-tags: [observability, logging, monitoring, tracking, vector-search, terraform, alerting, sli, slo]
+tags: [observability, logging, monitoring, tracking, vector-search, terraform, alerting, sli, slo, breadcrumbs]
 ---
 
 ## Observability Specifications
@@ -42,6 +42,32 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
   "labels": {
     "masked_500": true
   },
+  "server_breadcrumbs": [
+    {
+      "timestamp": "2026-02-17T10:30:00.100000Z",
+      "step": "request_received",
+      "message": "GET /technical/invalid-slug.md",
+      "data": { "method": "GET", "path": "/technical/invalid-slug.md" }
+    },
+    {
+      "timestamp": "2026-02-17T10:30:00.102000Z",
+      "step": "validation",
+      "message": "Slug validated",
+      "data": { "result": "pass" }
+    },
+    {
+      "timestamp": "2026-02-17T10:30:00.200000Z",
+      "step": "db_query",
+      "message": "Article lookup in Firestore Enterprise",
+      "data": { "collection": "technical_articles", "operation": "findOne" }
+    },
+    {
+      "timestamp": "2026-02-17T10:30:00.235000Z",
+      "step": "error",
+      "message": "Article not found",
+      "data": { "error_type": "NotFoundError" }
+    }
+  ],
   "log_type": "frontend_tracking",
   "cloud_run_instance": "instance-abc123"
 }
@@ -53,6 +79,8 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 > - `"frontend_tracking"` — for `POST /t` requests with `action: "page_view"`, `"link_click"`, or `"time_on_page"`.
 > - `"frontend_error"` — for `POST /t` requests with `action: "error_report"`.
 > - Omitted for all other requests (standard backend request logs).
+
+> **Note on `server_breadcrumbs`**: The `server_breadcrumbs` field is included ONLY in ERROR-severity log entries. It contains an array of timestamped processing steps recorded via Go `context.Context` during request handling (see BE-BREADCRUMB in [03-backend-api-specifications.md](03-backend-api-specifications.md)). On successful requests, breadcrumb data is discarded and not logged. Each entry contains `timestamp`, `step`, `message`, and optional `data` fields.
 ```
 
 **Log Levels**:
@@ -69,7 +97,7 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 - Every incoming request (INFO): method, path, status, latency
 - Every `POST /t` tracking request (INFO): include `log_type: "frontend_tracking"`, the `visitor_id` (server-computed hash), and the tracking payload fields (page, referrer, action, browser, connection_speed, plus action-specific fields such as `clicked_url` for `link_click` and `milestone` for `time_on_page`) in the structured log entry
-- Every `POST /t` error report (INFO): include `log_type: "frontend_error"`, the `visitor_id`, and the error payload fields (error_type, error_message, page, browser, connection_speed) in the structured log entry
+- Every `POST /t` error report (INFO): include `log_type: "frontend_error"`, the `visitor_id`, and the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs) in the structured log entry. The `breadcrumbs` array (up to 50 client-side activity entries from FE-COMP-013) is included verbatim in the log entry and flows to the `frontend_error_logs` BigQuery table
 - Rate limit triggered (WARNING): client identifier, endpoint, offense count
 - Rate limit ban applied (WARNING): client identifier, ban tier, expiry
 - Internal error masked as 404 (ERROR): full error details
@@ -184,6 +212,7 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 | Browser + version    | `navigator.userAgent`                     |
 | IP address           | Server-side from request headers          |
 | Connection speed     | `navigator.connection` API (where available) |
+| Breadcrumbs          | FE-COMP-013 activity trail (up to 50 entries) |
 | Timestamp            | Server-side UTC timestamp                 |
 
 **Connection Speed Detection**:
@@ -208,6 +237,19 @@ const speedInfo = connection ? {
 | JavaScript errors     | Uncaught exceptions, promise rejections     |
 
 **Data Retention**: Error report data is stored in BigQuery only (`frontend_error_logs` table) and retained for up to 2 years (see INFRA-010 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). Error data is NOT written to Firestore. The same IP truncation applies — no full IP addresses are stored.
+
+**BigQuery Schema Notes for Breadcrumb Data**:
+
+The `frontend_error_logs` BigQuery table receives structured log entries containing nested breadcrumb arrays. BigQuery auto-infers schema from JSON log payloads via Cloud Logging log sinks. The following nested/repeated fields will be present in error log entries:
+
+| BigQuery Column              | Source              | Type                              | Description                                                       |
+| ---------------------------- | ------------------- | --------------------------------- | ----------------------------------------------------------------- |
+| `jsonPayload.breadcrumbs`    | Client (FE-COMP-013)| RECORD (REPEATED)                 | Client-side activity trail: up to 50 entries with `timestamp`, `type`, `message`, `data` |
+| `jsonPayload.server_breadcrumbs` | Server (BE-BREADCRUMB) | RECORD (REPEATED)            | Server-side processing steps: timestamped entries with `step`, `message`, `data` |
+
+The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (no client-side `breadcrumbs`).
+
+> **Note**: BigQuery's automatic schema detection handles nested JSON objects and arrays. No manual schema definition is required. However, if querying breadcrumb data in Looker Studio or BigQuery SQL, use `UNNEST()` to flatten the repeated records for analysis.
 
 ---
 

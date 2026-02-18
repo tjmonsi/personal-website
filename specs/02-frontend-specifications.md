@@ -1,10 +1,10 @@
 ---
 title: Frontend Specifications
-version: 2.2
+version: 2.3
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
-tags: [frontend, nuxt4, vue3, spa]
+tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 ---
 
 ## Frontend Specifications
@@ -441,6 +441,7 @@ tags: [frontend, nuxt4, vue3, spa]
 
 - Tracking SHALL NOT include any personally identifiable information beyond what the browser naturally sends.
 - Tracking failures SHALL be silent (no error shown to user).
+- **POST /t failures SHALL NOT trigger error reports** (CLR-116): Failures of `POST /t` requests (regardless of action type) SHALL NOT generate `error_report` payloads. Since error reporting itself uses `POST /t`, reporting a tracking failure via tracking creates a circular dependency. All `POST /t` delivery failures are handled exclusively by the retry mechanism (FE-COMP-005-RETRY for error reports) or silently discarded (for tracking events).
 
 ---
 
@@ -466,10 +467,39 @@ tags: [frontend, nuxt4, vue3, spa]
 - WHEN sending an error report to `POST /t` fails due to a network error (e.g., device is offline, DNS failure, connection refused), THE SYSTEM SHALL queue the failed payload in memory.
 - THE SYSTEM SHALL retry sending the queued payload using exponential backoff with a maximum of **5 retry attempts**.
 - Retry delay schedule: 1 second, 2 seconds, 4 seconds, 8 seconds, 16 seconds (doubling each attempt).
-- WHEN the retry succeeds, THE SYSTEM SHALL remove the payload from the queue and discard it silently.
+- WHEN the retry succeeds, THE SYSTEM SHALL remove the payload from the queue, discard it silently, and display a brief toast notification: "Error reported. Thanks for helping improve the site!" The toast SHALL auto-dismiss after 5 seconds.
 - WHEN the device comes back online (detected via the `online` event on `window`), THE SYSTEM SHALL immediately attempt to flush all queued error reports.
 - THE SYSTEM SHALL also persist queued error reports to `sessionStorage` (key: `pending_error_reports`) so that payloads survive SPA route changes. Queued reports SHALL NOT persist across browser sessions (i.e., they are lost when the tab is closed).
 - During retries, the process SHALL remain silent (no UI feedback to the user).
+- THE SYSTEM SHALL NOT retry errors that are clearly non-retryable: HTTP `400` (bad request), `403` (forbidden), `405` (method not allowed). Only network errors and server errors (5xx) are retryable.
+
+**Error Report Delivery Success Toast** (CLR-119):
+
+- WHEN an error report is successfully delivered to `POST /t` (either on the first attempt or after retries), THE SYSTEM SHALL display a brief toast notification: "Error reported. Thanks for helping improve the site!"
+- The toast SHALL auto-dismiss after **5 seconds**.
+- The toast SHALL be non-intrusive and SHALL NOT block user interaction.
+
+**Error Display Criteria** (CLR-119):
+
+- **Toast-first, modal-as-fallback**: The error handling flow follows a progressive escalation pattern:
+  1. **Silent**: For tracking event failures (`page_view`, `link_click`, `time_on_page`). No user feedback.
+  2. **Toast**: When an error report is successfully sent to the backend. Brief confirmation toast.
+  3. **Modal**: When error report delivery fails after all 5 retries AND the failure was caused by a backend error response (not `503` or network unavailability). The modal allows users to manually share error data.
+- **Critical errors** (show modal after retry exhaustion):
+  - All 5 retry attempts exhausted AND failure was a backend error response (any HTTP status other than `503`).
+- **Non-critical errors** (show toast on successful report, silent on failure):
+  - Background tracking failures (`page_view`, `link_click`, `time_on_page`).
+  - Error reports that fail due to persistent network unavailability (device offline).
+  - Error reports that fail due to `503` responses (temporary infrastructure issue).
+
+**FE-COMP-005-RETRY Component Acceptance Criteria**:
+
+- **AC-RETRY-001**: Given a network error when sending an error report, when the first attempt fails, then the payload is queued in memory and `sessionStorage`.
+- **AC-RETRY-002**: Given a queued error report, when the retry timer fires, then the system attempts redelivery with exponential backoff delays of 1s, 2s, 4s, 8s, 16s.
+- **AC-RETRY-003**: Given an error report retry succeeds, when the response is `200`, then the queued payload is removed and a success toast is displayed.
+- **AC-RETRY-004**: Given a non-retryable error (HTTP `400`, `403`, `405`), when received, then the system does NOT retry and proceeds directly to failure handling.
+- **AC-RETRY-005**: Given the device is offline with queued reports, when the `online` event fires, then all queued reports are flushed immediately.
+- **AC-RETRY-006**: Given error reports are queued in `sessionStorage`, when the user navigates to a different SPA route, then the queue persists and retries continue.
 
 **Error Report Delivery Failure Modal** (FE-COMP-005-MODAL):
 
@@ -486,6 +516,16 @@ tags: [frontend, nuxt4, vue3, spa]
 - The modal SHALL be accessible (keyboard navigable, focus trapped while open, dismissable via Escape key).
 - THE SYSTEM SHALL NOT display the modal more than once per page session for the same error. If the user dismisses the modal, subsequent delivery failures for the same error SHALL fail silently.
 - The error report data displayed in the modal SHALL NOT include the `token` (JWT) or `visitor_session_id` fields. Only diagnostic data (error details and breadcrumbs) SHALL be shown.
+- **Circular failure guard** (CLR-116): Error report delivery failures SHALL NOT themselves generate new error reports. The modal's purpose is to allow users to manually copy and share error data — there is no automated "report" action that uses `POST /t`. If the error report was about a `POST /t` tracking failure (which should not occur per the General Tracking Rules guard), the modal SHALL still display but no automated follow-up is attempted.
+
+**FE-COMP-005-MODAL Component Acceptance Criteria**:
+
+- **AC-MODAL-001**: Given all 5 retries are exhausted AND the failure was a backend error (not `503`), when the final retry fails, then the error modal is displayed with the formatted error log.
+- **AC-MODAL-002**: Given all 5 retries are exhausted AND the failure was network unavailability or `503`, when the final retry fails, then no modal is displayed (silent failure).
+- **AC-MODAL-003**: Given the error modal is displayed, when the user clicks "Copy to clipboard", then the error log text (excluding JWT and `visitor_session_id`) is copied and a "Copied!" confirmation appears.
+- **AC-MODAL-004**: Given the error modal is displayed, when the user presses Escape or clicks "Close", then the modal is dismissed and focus returns to the page.
+- **AC-MODAL-005**: Given the error modal was dismissed for a specific error, when another delivery failure occurs for the same error, then the modal is NOT shown again (silent failure).
+- **AC-MODAL-006**: Given the error modal is displayed, when inspected for accessibility, then focus is trapped within the modal, all buttons are keyboard navigable, and ARIA attributes are present.
 
 ---
 
@@ -542,6 +582,16 @@ tags: [frontend, nuxt4, vue3, spa]
   - `clearBreadcrumbs()`: Clear all recorded breadcrumbs.
 - THE SYSTEM SHALL automatically integrate with FE-COMP-005 so that every error report includes the current breadcrumb trail at the time of the error.
 - The breadcrumb buffer SHALL exist only in memory. It SHALL NOT be persisted to `sessionStorage`, `localStorage`, or IndexedDB. When the tab is closed or the page is fully reloaded, the buffer is reset.
+
+**FE-COMP-013 Component Acceptance Criteria**:
+
+- **AC-BREADCRUMB-FE-001**: Given a user navigates between SPA routes, when the route changes, then a `navigation` breadcrumb entry is recorded with `from` and `to` paths.
+- **AC-BREADCRUMB-FE-002**: Given a user clicks an interactive element (button, link), when the click event fires, then a `click` breadcrumb entry is recorded with the element tag and truncated text content.
+- **AC-BREADCRUMB-FE-003**: Given the breadcrumb buffer contains 50 entries, when a new event occurs, then the oldest entry is evicted and the new entry is appended (ring buffer FIFO).
+- **AC-BREADCRUMB-FE-004**: Given an error report is about to be sent, when FE-COMP-005 constructs the payload, then the current breadcrumb trail (up to 50 entries, oldest first) is attached as the `breadcrumbs` array.
+- **AC-BREADCRUMB-FE-005**: Given any breadcrumb entry, when inspected, then it contains no PII — no form values (except search queries), no passwords, no tokens, no session identifiers.
+- **AC-BREADCRUMB-FE-006**: Given the `useBreadcrumbs()` composable, when called from any component, then it provides `addBreadcrumb()`, `getBreadcrumbs()`, and `clearBreadcrumbs()` functions.
+- **AC-BREADCRUMB-FE-007**: Given the page is fully reloaded or the tab is closed, when the page unloads, then the breadcrumb buffer is lost (memory-only, no persistence).
 
 ---
 

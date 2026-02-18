@@ -1,8 +1,8 @@
 ---
 title: Draft Cost Estimate — GCP Monthly Costs
-version: 1.0-draft
+version: 1.1-draft
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-18
 owner: TJ Monserrat
 tags: [cost, infrastructure, gcp, estimate]
 ---
@@ -24,6 +24,14 @@ This document provides a rough cost estimate for running the personal website in
 - [Vertex AI Pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing)
 - [Firestore Native Pricing](https://cloud.google.com/firestore/pricing)
 ---
+
+### Changes from v1.0-draft
+
+- **Breadcrumb tracking (FE-COMP-013, BE-BREADCRUMB)**: Activity breadcrumbs attached to error reports increase BigQuery log entry size by ~2-5 KB per error report. At ~100 error reports/month (normal) or ~5,000/month (spike), additional BigQuery ingestion is <1 MB/month. No cost impact — well within free tier.
+- **Error retry with exponential backoff (FE-COMP-005-RETRY)**: Up to 3 additional Cloud Run requests per failed request. At ~100 errors/month (normal), worst case is ~300 extra requests. Negligible Cloud Run CPU cost (<$0.001/month).
+- **Error modal (FE-COMP-005-MODAL)**: Pure frontend component. No backend cost impact.
+- **Server-side breadcrumbs (BE-BREADCRUMB)**: Slight increase in error-severity log entry size. Negligible at current volumes.
+- **Cost tables and totals unchanged** — all new features have zero measurable cost impact at both normal and spike traffic levels.
 
 ### Changes from v0.9-draft
 

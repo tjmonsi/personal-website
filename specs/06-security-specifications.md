@@ -1,8 +1,8 @@
 ---
 title: Security Specifications
-version: 3.0
+version: 3.1
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-18
 owner: TJ Monserrat
 tags: [security, rate-limiting, cors, authentication, vector-search, terraform, iac, wif, service-accounts]
 ---
@@ -53,6 +53,21 @@ tags: [security, rate-limiting, cors, authentication, vector-search, terraform, 
 - THE SYSTEM SHALL reject requests with unknown or malformed query parameters with HTTP `400`.
 
 > **Note**: This strict query parameter validation is intentional. The backend API (`api.tjmonsi.com`) is not the URL shared on social media — the frontend URL (`tjmonsi.com`) is. UTM parameters and other tracking query strings on the frontend URL are handled client-side and forwarded to the backend via `POST /t` as tracking data. The backend API expects a strict one-to-one mapping of query parameters for search and pagination purposes only.
+
+**POST /t Breadcrumbs Validation** (CLR-114):
+
+- THE SYSTEM SHALL validate the `breadcrumbs` field in `POST /t` error report payloads with the following constraints:
+  - `breadcrumbs`: optional array, maximum **50 entries**.
+  - Each entry SHALL be an object with the following fields:
+    - `timestamp` (string, required): ISO 8601 format. THE SYSTEM SHALL reject entries with non-ISO 8601 timestamps.
+    - `type` (string, required): Maximum 50 characters.
+    - `message` (string, required): Maximum 300 characters.
+    - `data` (object, optional): Maximum 500 bytes when serialized to JSON. Values SHALL be strings or numbers only.
+  - Total serialized `breadcrumbs` payload size: maximum **50 KB**.
+- IF the `breadcrumbs` array contains more than 50 entries, THE SYSTEM SHALL truncate to the **last 50 entries** (keep newest) and log a WARNING. THE SYSTEM SHALL NOT reject the request.
+- IF an individual breadcrumb entry has fields exceeding the size limits, THE SYSTEM SHALL truncate the field values to the maximum allowed length.
+- IF `breadcrumbs` is provided for actions other than `error_report`, THE SYSTEM SHALL ignore the field.
+- Breadcrumbs validation is enforced server-side to prevent memory exhaustion from oversized payloads. Client-side limits (FE-COMP-013) are a first line of defense but cannot be trusted.
 
 ---
 
