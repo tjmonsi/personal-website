@@ -342,7 +342,7 @@ tags: [frontend, nuxt4, vue3, spa]
 | 403         | "Access to this site has been temporarily restricted."                                            |
 | 404         | "The content you're looking for doesn't exist or has been removed."                              |
 | 405         | "This action is not supported."                                                                  |
-| 429         | "You're making too many requests. Please wait a moment and try again."                           |
+| 429         | "Whoa there! You're sending too many requests. Take a breather and try again in about 30 minutes. If this keeps happening, try a different network — or make sure you're not browsing like a bot!" |
 
 - **429 handling note**: The frontend SHALL match 429 responses by HTTP status code only. It SHALL NOT attempt to parse or depend on the response body for 429 responses, because Cloud Armor generates these responses at the load balancer level and the body format may not be JSON (see CLR-042, INFRA-005 custom error response configuration).
 
@@ -656,7 +656,7 @@ tags: [frontend, nuxt4, vue3, spa]
 - **AC-FE-007**: Given a rendered article with image references, when images use `https://api.tjmonsi.com/images/...` URLs, then images load successfully under the CSP `img-src` policy.
 - **AC-FE-008**: Given a user visiting any page, when the page loads, then a `page_view` tracking event is sent to `POST /t` with the JWT `token` in the request body via `navigator.sendBeacon()` (or `fetch` fallback).
 - **AC-FE-009**: Given a user clicking an anchor element, when the click event fires, then a `link_click` tracking event is sent asynchronously without blocking navigation.
-- **AC-FE-010**: Given a backend error response, when the response status is 429, then a snackbar displays "You're making too many requests..." and auto-dismisses after 10 seconds.
+- **AC-FE-010**: Given a backend error response, when the response status is 429, then a snackbar displays a message advising the user to wait approximately 30 minutes before retrying, suggests trying a different network if the issue persists, and hints that bot-like browsing behavior may trigger rate limiting. The snackbar auto-dismisses after 10 seconds.
 - **AC-FE-011**: Given a previously visited article cached offline, when the user goes offline and navigates to that article, then the cached content is rendered.
 - **AC-FE-012**: Given a new service worker version is detected, when the user is on the site, then an update snackbar appears with a changelog link and refresh button, displayed for 20 seconds.
 - **AC-FE-013**: Given a user visiting `/changelog`, when the page loads, then a chronological list of frontend changes is displayed.
