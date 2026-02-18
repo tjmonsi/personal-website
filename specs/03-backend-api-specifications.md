@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 2.3
+version: 2.5
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -53,6 +53,153 @@ tags: [backend, api, go, cloud-run]
   - Client IP address
   - Error message and stack trace
   - Request ID / correlation ID
+  - Server-side breadcrumb trail (see **BE-BREADCRUMB** below)
+
+---
+
+#### BE-BREADCRUMB: Server-Side Request Breadcrumb Trail
+
+**Description**: A per-request, in-memory breadcrumb collector that records processing steps, variable state changes, and decision points during the handling of a single API request. When an internal error occurs, the breadcrumb trail is included in the structured error log to provide full debugging context in a single log entry.
+
+**Requirements**:
+
+- THE SYSTEM SHALL create a new breadcrumb collector at the start of every incoming HTTP request, scoped to that request's `context.Context`.
+- THE SYSTEM SHALL propagate the collector through Go's `context.Context` so that any function in the request call chain can record breadcrumbs without passing an additional parameter.
+- THE SYSTEM SHALL limit the breadcrumb buffer to a maximum of **50 entries** per request. If more than 50 entries are recorded, THE SYSTEM SHALL discard the oldest entry (FIFO eviction).
+- THE SYSTEM SHALL record breadcrumb entries at the following processing points:
+
+| Step Category        | When to Record                                                      | Data to Capture                                                                |
+| -------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `request_received`   | At the start of request handling (middleware)                       | HTTP method, path, query parameters (sanitized), client IP (truncated)         |
+| `auth_check`         | After authentication/authorization decision                        | Auth result (`pass`, `fail`, `ban_tier`), relevant identifiers                 |
+| `validation`         | After input validation                                              | Validation result (`pass`, `fail`), which fields failed (no raw values)        |
+| `db_query`           | Before and after each database operation                            | Collection name, operation type (`find`, `findOne`, `aggregate`), filter keys (not values), result count, latency (ms) |
+| `cache_lookup`       | On cache check (hit or miss)                                       | Cache type (`embedding_cache`, `image_cache`, `sitemap_cache`), key identifier, result (`hit`, `miss`) |
+| `external_api_call`  | Before and after Vertex AI or other external API calls              | Service name, operation, latency (ms), status (`success`, `error`)             |
+| `vector_search`      | After vector similarity search                                      | Collection queried, result count, distance threshold applied, candidates returned |
+| `filter_applied`     | When filters are applied to query results                           | Filter names and operator types (not filter values), result count after filter |
+| `pagination`         | When pagination is computed                                         | Page requested, page size, total items, total pages                            |
+| `response_prepared`  | Just before sending the response                                    | HTTP status code, content type, response size (bytes)                          |
+| `error`              | When an error is caught                                             | Error message, error type, source function name                                |
+| `decision`           | At significant branching points (e.g., cache hit vs miss path)      | Decision description, chosen path                                              |
+| `state_change`       | When a meaningful variable value changes during processing          | Variable name, old value summary, new value summary (no PII or secrets)        |
+
+- Each breadcrumb entry SHALL conform to the following structure:
+
+```go
+type Breadcrumb struct {
+    Timestamp time.Time              `json:"timestamp"`
+    Step      string                 `json:"step"`
+    Message   string                 `json:"message"`
+    Data      map[string]interface{} `json:"data,omitempty"`
+}
+```
+
+  - `timestamp`: UTC time with microsecond precision.
+  - `step`: One of the step categories listed in the table above.
+  - `message`: A short, human-readable description (max 300 characters).
+  - `data`: Structured key-value pairs with diagnostic details. Values SHALL be strings, numbers, or booleans only (no nested objects or arrays).
+
+- **Security and Privacy Constraints**:
+  - THE SYSTEM SHALL NEVER record sensitive data in breadcrumbs: no JWT tokens, no API keys, no passwords, no full IP addresses, no raw user input values (query parameter values, request bodies), no database document contents.
+  - For database queries, breadcrumbs SHALL record filter **keys** (field names) but NOT filter **values**. Example: `{"filter_keys": "category,tags", "operation": "find"}` — not `{"category": "DevOps", "tags": ["go"]}`.
+  - For validation failures, breadcrumbs SHALL record **which fields** failed but NOT the submitted values.
+  - Client IP addresses in breadcrumbs SHALL be truncated (same truncation as tracking: last octet zeroed for IPv4, last 80 bits zeroed for IPv6).
+
+- **Integration with Error Logging**:
+  - WHEN an internal error occurs, THE SYSTEM SHALL retrieve the breadcrumb trail from the current request context and include it as a `server_breadcrumbs` array in the structured error log entry emitted to Cloud Logging.
+  - The `server_breadcrumbs` field SHALL appear alongside the existing error log fields (timestamp, method, path, query parameters, client IP, error message, stack trace, request ID).
+  - This enables reading the full processing history of a failed request in a single Cloud Logging entry without correlating multiple log lines.
+
+- **Performance Constraints**:
+  - Breadcrumb recording SHALL NOT add more than **1 millisecond** of overhead to the total request processing time under normal conditions.
+  - THE SYSTEM SHALL use a pre-allocated slice (capacity 50) to avoid repeated memory allocations.
+  - THE SYSTEM SHALL NOT persist breadcrumbs to any external storage. Breadcrumbs exist only in memory for the duration of the request.
+  - On successful requests (no errors), THE SYSTEM SHALL discard the breadcrumb buffer when the request completes. Breadcrumbs are only serialized and logged when an error occurs.
+
+- **Example Error Log Entry with Breadcrumbs**:
+
+```json
+{
+  "severity": "ERROR",
+  "timestamp": "2026-02-18T10:30:01.123456Z",
+  "request_id": "abc123-def456",
+  "method": "GET",
+  "path": "/technical",
+  "query_params": "q=cloud+run&category=DevOps&page=2",
+  "client_ip": "203.0.113.0",
+  "error": "firestore: DeadlineExceeded",
+  "stack_trace": "...",
+  "server_breadcrumbs": [
+    {
+      "timestamp": "2026-02-18T10:30:00.100000Z",
+      "step": "request_received",
+      "message": "GET /technical with query params",
+      "data": { "method": "GET", "path": "/technical", "has_query": true, "has_filters": true }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.102000Z",
+      "step": "auth_check",
+      "message": "No auth required for GET endpoint",
+      "data": { "result": "pass" }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.103000Z",
+      "step": "validation",
+      "message": "Query parameters validated",
+      "data": { "result": "pass", "params_present": "q,category,page" }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.104000Z",
+      "step": "decision",
+      "message": "Search query present — using vector search path",
+      "data": { "path": "vector_search" }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.105000Z",
+      "step": "cache_lookup",
+      "message": "Embedding cache lookup",
+      "data": { "cache_type": "embedding_cache", "result": "miss" }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.300000Z",
+      "step": "external_api_call",
+      "message": "Vertex AI embedding generated",
+      "data": { "service": "vertex_ai", "operation": "embed", "latency_ms": 195, "status": "success" }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.310000Z",
+      "step": "state_change",
+      "message": "Embedding vector obtained and L2-normalized",
+      "data": { "variable": "embedding_vector", "dimensions": 2048 }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.500000Z",
+      "step": "vector_search",
+      "message": "Firestore Native vector search completed",
+      "data": { "collection": "technical_article_vectors", "candidates": 15, "distance_threshold": 0.35 }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.510000Z",
+      "step": "filter_applied",
+      "message": "Category filter applied to candidates",
+      "data": { "filter_keys": "category", "candidates_before": 15, "candidates_after": 8 }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:00.520000Z",
+      "step": "db_query",
+      "message": "Fetching full documents from Firestore Enterprise",
+      "data": { "collection": "technical_articles", "operation": "find", "doc_ids_count": 8 }
+    },
+    {
+      "timestamp": "2026-02-18T10:30:01.120000Z",
+      "step": "error",
+      "message": "Firestore Enterprise query timed out",
+      "data": { "error_type": "DeadlineExceeded", "source": "articleRepository.FindByIDs", "latency_ms": 600 }
+    }
+  ]
+}
+```
 
 #### Response Format
 
@@ -479,7 +626,27 @@ For error reporting:
     "effective_type": "3g",
     "downlink": 1.5,
     "rtt": 300
-  }
+  },
+  "breadcrumbs": [
+    {
+      "timestamp": "2026-02-18T10:29:55.100Z",
+      "type": "navigation",
+      "message": "Navigated from / to /technical",
+      "data": { "from": "/", "to": "/technical" }
+    },
+    {
+      "timestamp": "2026-02-18T10:29:58.200Z",
+      "type": "api_request",
+      "message": "GET /technical",
+      "data": { "method": "GET", "path": "/technical" }
+    },
+    {
+      "timestamp": "2026-02-18T10:29:58.500Z",
+      "type": "api_error",
+      "message": "GET /technical failed: network error",
+      "data": { "method": "GET", "path": "/technical", "error": "Failed to fetch" }
+    }
+  ]
 }
 ```
 
@@ -493,6 +660,7 @@ For error reporting:
 - `clicked_url` is required when `action` is `link_click` (string, max 2000 characters).
 - `milestone` is required when `action` is `time_on_page` and must be one of: `1min`, `2min`, `5min`.
 - `error_type` is required when `action` is `error_report`.
+- `breadcrumbs` is optional when `action` is `error_report` (array of objects, max 50 entries). Each entry SHALL contain `timestamp` (string, ISO 8601), `type` (string, max 50 characters), `message` (string, max 300 characters), and optionally `data` (object with string or number values only). If more than 50 entries are provided, THE SYSTEM SHALL truncate to the last 50. If `breadcrumbs` is provided for actions other than `error_report`, it SHALL be ignored.
 - All other fields are optional.
 - IF validation fails, THE SYSTEM SHALL return HTTP `400`.
 
@@ -512,7 +680,7 @@ For error reporting:
 - IF `action` is `"page_view"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the tracking payload fields (page, referrer, action, browser, connection_speed, truncated IP, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
 - IF `action` is `"link_click"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the click payload fields (page, clicked_url, action, browser, connection_speed, truncated IP, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
 - IF `action` is `"time_on_page"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the engagement payload fields (page, milestone, action, browser, connection_speed, truncated IP, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
-- IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, truncated IP, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
+- IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs, truncated IP, timestamp, visitor_id). The `breadcrumbs` array (if present) SHALL be included in the structured log entry as-is. This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
 - THE SYSTEM SHALL NOT write tracking or error report data to Firestore. Structured logging to stdout is the sole persistence mechanism; Cloud Logging routes these entries to BigQuery.
 - THE SYSTEM SHALL apply the standard rate limiting rules to this endpoint (see SEC-002).
 
@@ -649,3 +817,7 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-016**: Given a `GET /blog` request with a `q` parameter, when matching articles exist, then the response items are sorted by vector similarity (cosine distance ascending), not by `date_updated`.
 - **AC-API-017**: Given a `GET /others` request without a `q` parameter, when items exist, then the response items are sorted by `date_updated` descending.
 - **AC-API-018**: Given a `GET /others` request with a `q` parameter, when matching items exist, then the response items are sorted by vector similarity (cosine distance ascending), not by `date_updated`.
+- **AC-API-019**: Given any API request that results in an internal error, when the error is logged to Cloud Logging, then the log entry includes a `server_breadcrumbs` array containing the chronological processing steps (request received, validation, database queries, cache lookups, external API calls, decisions) that occurred before the error.
+- **AC-API-020**: Given an API request that completes successfully, when the response is sent, then no breadcrumb data is persisted or logged (breadcrumbs are discarded on success).
+- **AC-API-021**: Given an API request processing a vector search with filters (`GET /technical?q=...&category=...`), when an error occurs during the database query step, then the `server_breadcrumbs` in the error log show each step: request received, validation, embedding cache lookup, Vertex AI call (if cache miss), vector search results, filter application, and the failing database query — with latency measurements for each step.
+- **AC-API-022**: Given the breadcrumb trail records a database query, when the log is inspected, then filter field names (keys) are present but filter values are NOT present (privacy constraint).

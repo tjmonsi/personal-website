@@ -1,8 +1,8 @@
 ---
 title: Frontend Specifications
-version: 2.1
+version: 2.2
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-18
 owner: TJ Monserrat
 tags: [frontend, nuxt4, vue3, spa]
 ---
@@ -34,6 +34,8 @@ tags: [frontend, nuxt4, vue3, spa]
 | `visitor_id`     | A SHA-256 hash computed server-side from `visitor_session_id` + truncated IP + User-Agent. A non-reversible, session-scoped identifier for unique visitor counting and bot discrimination. |
 | Link Click Tracking | Fire-and-forget anonymous tracking of anchor element clicks, sent via `navigator.sendBeacon()` (with `fetch()` + `keepalive: true` fallback) to `POST /t`. |
 | Time-on-Page Milestone | An engagement signal sent when a user remains on a page for 1, 2, or 5 minutes of active foreground time. Only foreground time counts (uses Page Visibility API). |
+| Breadcrumb Trail | An in-memory ring buffer of up to 50 recent user interactions (navigations, clicks, API calls, filter changes, errors, connectivity changes) recorded by FE-COMP-013. Attached to error reports for debugging context. Does not contain personal information, passwords, or tokens. |
+| Exponential Backoff | A retry strategy where the delay between consecutive retry attempts doubles each time (e.g., 1s, 2s, 4s, 8s, 16s), used to avoid overwhelming a failing service. |
 
 ---
 
@@ -276,8 +278,8 @@ tags: [frontend, nuxt4, vue3, spa]
 - THE SYSTEM SHALL display a "Last updated" date at the top of the privacy policy.
 - THE SYSTEM SHALL display a **TL;DR section** at the top of the privacy policy, before the detailed sections. The TL;DR SHALL be clear, concise, and playful in tone to match the website's personality. It SHALL summarize the key points at a glance (e.g., "No cookies. No accounts. No tracking you across the internet. We just count page views with anonymized data and delete everything after 2 years. That's it."). (Additional Note, Batch 0014)
 - THE SYSTEM SHALL include the following sections in the privacy policy:
-  - **Data We Collect**: Truncated IP address (last octet zeroed for IPv4, last 80 bits zeroed for IPv6), browser name and version, pages visited, referrer URL, link clicks (which URLs you click on), time-on-page engagement milestones (whether you stay on a page for 1, 2, or 5 minutes), connection speed information, a randomized session identifier (not linked to your identity), a non-reversible session-scoped identifier derived from the session ID, truncated IP address, and browser information (used for unique visitor counting) (CLR-111), and timestamps. No full IP addresses are stored.
-  - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited, links are clicked, and engagement milestones are reached. Client-side error reporting for performance monitoring. A random session identifier is generated in your browser for each visit and is not stored after you close the tab. No cookies, session tracking, or third-party scripts are used.
+  - **Data We Collect**: Truncated IP address (last octet zeroed for IPv4, last 80 bits zeroed for IPv6), browser name and version, pages visited, referrer URL, link clicks (which URLs you click on), time-on-page engagement milestones (whether you stay on a page for 1, 2, or 5 minutes), connection speed information, a randomized session identifier (not linked to your identity), a non-reversible session-scoped identifier derived from the session ID, truncated IP address, and browser information (used for unique visitor counting) (CLR-111), and timestamps. No full IP addresses are stored. When an error occurs, the error report may include an **activity breadcrumb trail** — a list of up to 50 recent interactions (page navigations, button clicks, API requests and their status codes, filter changes, and connectivity status changes) leading up to the error. Breadcrumbs do not contain form inputs (other than search queries), passwords, tokens, or any personal information.
+  - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited, links are clicked, and engagement milestones are reached. Client-side error reporting for performance monitoring, which may include an activity breadcrumb trail of recent interactions for debugging context. A random session identifier is generated in your browser for each visit and is not stored after you close the tab. No cookies, session tracking, or third-party scripts are used. If automatic error reporting fails, users may be asked to voluntarily copy and share error details (including the breadcrumb trail) via the socials/contact page — this is entirely optional.
   - **Purpose of Data Collection**: Understanding how helpful and engaging the site's content is to readers, monitoring site performance, improving user experience, identifying which content resonates with visitors, and discriminating between real human visitors and automated bots or scrapers that collect text without reading it. The engagement data (time on page, link clicks) helps the site owner understand whether content is genuinely useful rather than just visited.
   - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond truncated IP and browser information, no cross-session tracking (i.e., we cannot recognize you on a return visit), no third-party tracking scripts, no advertising data.
   - **Data Retention**: Visitor tracking data and error reports are stored as anonymized log entries in Google BigQuery for long-term analytics and trend analysis. This data is automatically deleted after 2 years. The same anonymization (IP truncation) applies — no full IP addresses are stored in BigQuery. No tracking or error report data is stored in the application database. Infrastructure-level load balancer logs (used for DDoS analysis and security incident response) may retain full IP addresses for up to 90 days; these logs are not used in analytics reports.
@@ -446,7 +448,7 @@ tags: [frontend, nuxt4, vue3, spa]
 
 **Requirements**:
 
-- WHEN a network error or slow loading occurs, THE SYSTEM SHALL send error data to the backend via `POST /t`.
+- WHEN a network error, JavaScript error, or slow loading occurs, THE SYSTEM SHALL send error data to the backend via `POST /t`.
 - THE SYSTEM SHALL use the same JWT body-based authentication mechanism as FE-COMP-004 (including the `token` field in each request body).
 - Error payload (JSON body, sent to the same `POST /t` endpoint with `action: "error_report"`) SHALL include:
   - `action`: `"error_report"`
@@ -456,8 +458,90 @@ tags: [frontend, nuxt4, vue3, spa]
   - `page`: Page URL where the error occurred
   - `browser`: Browser name and version
   - `connection_speed`: Detected connection speed (via Navigator.connection API where available)
+  - `breadcrumbs`: The current breadcrumb trail from FE-COMP-013 (array of up to 50 breadcrumb entries). See FE-COMP-013 for the breadcrumb entry schema.
 - IP address and server-side timestamp are determined by the backend from request headers.
-- Error reporting failures SHALL be silent (no error shown to user).
+
+**Retry with Exponential Backoff** (FE-COMP-005-RETRY):
+
+- WHEN sending an error report to `POST /t` fails due to a network error (e.g., device is offline, DNS failure, connection refused), THE SYSTEM SHALL queue the failed payload in memory.
+- THE SYSTEM SHALL retry sending the queued payload using exponential backoff with a maximum of **5 retry attempts**.
+- Retry delay schedule: 1 second, 2 seconds, 4 seconds, 8 seconds, 16 seconds (doubling each attempt).
+- WHEN the retry succeeds, THE SYSTEM SHALL remove the payload from the queue and discard it silently.
+- WHEN the device comes back online (detected via the `online` event on `window`), THE SYSTEM SHALL immediately attempt to flush all queued error reports.
+- THE SYSTEM SHALL also persist queued error reports to `sessionStorage` (key: `pending_error_reports`) so that payloads survive SPA route changes. Queued reports SHALL NOT persist across browser sessions (i.e., they are lost when the tab is closed).
+- During retries, the process SHALL remain silent (no UI feedback to the user).
+
+**Error Report Delivery Failure Modal** (FE-COMP-005-MODAL):
+
+- IF all 5 retry attempts are exhausted AND the failure was caused by a backend error response (any HTTP status other than `503`), THE SYSTEM SHALL display a modal dialog to the user.
+- IF all 5 retry attempts are exhausted AND the failure was caused by persistent network unavailability (device offline) or a `503` response, THE SYSTEM SHALL fail silently (no modal). The `503` status indicates a temporary infrastructure issue that does not warrant user intervention.
+- The modal SHALL contain:
+  - A heading: "Something went wrong"
+  - An explanation paragraph: "We encountered an error and couldn't send the error report automatically. If you'd like to help TJ investigate, you can copy the error details below and send them via any of the contact methods on the socials page."
+  - A read-only text area displaying a formatted, human-readable version of the error report payload (including `error_type`, `error_message`, `page`, `browser`, `connection_speed`, and the `breadcrumbs` trail).
+  - A "Copy to clipboard" button that copies the text area content using the Clipboard API (with `document.execCommand('copy')` fallback). THE SYSTEM SHALL display a brief "Copied!" confirmation after copying.
+  - A link to the socials page (`/socials`) with the text: "Go to Socials to contact TJ"
+  - A privacy note: "Not comfortable sharing this data? Visit our [Privacy Policy](/privacy) to learn exactly what this error log contains. No personal information is included."
+  - A "Close" button to dismiss the modal without taking action.
+- The modal SHALL be accessible (keyboard navigable, focus trapped while open, dismissable via Escape key).
+- THE SYSTEM SHALL NOT display the modal more than once per page session for the same error. If the user dismisses the modal, subsequent delivery failures for the same error SHALL fail silently.
+- The error report data displayed in the modal SHALL NOT include the `token` (JWT) or `visitor_session_id` fields. Only diagnostic data (error details and breadcrumbs) SHALL be shown.
+
+---
+
+#### FE-COMP-013: Activity Breadcrumb Trail
+
+**Description**: An in-memory ring buffer that records the last 50 user interactions and state changes. Attached to error reports (FE-COMP-005) to provide debugging context.
+
+**Requirements**:
+
+- THE SYSTEM SHALL maintain an in-memory array (ring buffer) of breadcrumb entries, limited to a maximum of **50 entries**.
+- WHEN the buffer reaches 50 entries and a new entry is recorded, THE SYSTEM SHALL discard the oldest entry (FIFO eviction).
+- THE SYSTEM SHALL automatically record a breadcrumb entry for each of the following events:
+
+| Event Type         | Trigger                                                                 | Data Recorded                                                        |
+| ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `navigation`       | SPA route change (Vue Router `afterEach` hook)                          | `from` path, `to` path                                               |
+| `click`            | User clicks an interactive element (button, link, input)                | Element tag, text content (truncated to 100 chars), target URL (if link) |
+| `api_request`      | Frontend initiates a `fetch` call to the backend API                    | HTTP method, URL path, query parameters                              |
+| `api_response`     | Backend API response received                                           | HTTP method, URL path, status code, response time (ms)               |
+| `api_error`        | Backend API returns an error status or network failure                  | HTTP method, URL path, status code or error message                  |
+| `search`           | User submits a search query (FE-COMP-001)                               | Query string (truncated to 100 chars), page                          |
+| `filter_change`    | User changes a filter control (category, tags, date range, tag_match)   | Filter name, new value                                               |
+| `page_visibility`  | Page visibility changes (Page Visibility API)                           | New state (`visible` or `hidden`)                                    |
+| `offline_status`   | Device online/offline status changes                                    | New state (`online` or `offline`)                                    |
+| `js_error`         | Unhandled JavaScript error (`window.onerror` or `unhandledrejection`)   | Error message (truncated to 200 chars), source file, line number     |
+
+- Each breadcrumb entry SHALL conform to the following schema:
+
+```json
+{
+  "timestamp": "2026-02-18T10:30:00.123Z",
+  "type": "navigation",
+  "message": "Navigated from /technical to /blog",
+  "data": {
+    "from": "/technical",
+    "to": "/blog"
+  }
+}
+```
+
+  - `timestamp` (string, required): ISO 8601 UTC timestamp with millisecond precision.
+  - `type` (string, required): One of the event types listed in the table above.
+  - `message` (string, required): A short, human-readable description of the event (max 300 characters).
+  - `data` (object, optional): Structured key-value data relevant to the event. Values SHALL be strings or numbers only (no nested objects).
+
+- THE SYSTEM SHALL NOT record any personally identifiable information in breadcrumbs. Breadcrumbs SHALL NOT contain form field values (except search queries), passwords, tokens, or session identifiers.
+- THE SYSTEM SHALL sanitize breadcrumb data:
+  - Truncate `message` to 300 characters.
+  - Truncate individual `data` string values to 200 characters.
+  - Strip any query parameters from URLs that might contain sensitive data (e.g., tokens in query strings).
+- THE SYSTEM SHALL expose a composable or utility function (e.g., `useBreadcrumbs()` or `breadcrumbService`) that allows any component to:
+  - `addBreadcrumb(type, message, data?)`: Manually record a breadcrumb.
+  - `getBreadcrumbs()`: Retrieve the current breadcrumb trail as an array (oldest first).
+  - `clearBreadcrumbs()`: Clear all recorded breadcrumbs.
+- THE SYSTEM SHALL automatically integrate with FE-COMP-005 so that every error report includes the current breadcrumb trail at the time of the error.
+- The breadcrumb buffer SHALL exist only in memory. It SHALL NOT be persisted to `sessionStorage`, `localStorage`, or IndexedDB. When the tab is closed or the page is fully reloaded, the buffer is reset.
 
 ---
 
@@ -664,3 +748,10 @@ tags: [frontend, nuxt4, vue3, spa]
 - **AC-FE-015**: Given WCAG 2.1 Level AA requirements, when any page is audited, then all interactive elements are keyboard navigable and color contrast meets minimum requirements.
 - **AC-FE-016**: Given a user on `/technical`, `/blog`, or `/others` with no search query active, when articles are displayed, then they are ordered by most recently updated first (`date_updated` descending).
 - **AC-FE-017**: Given a user on `/technical`, `/blog`, or `/others` with a search query active, when results are displayed, then they are ordered by relevance to the search query (most relevant first), not by `date_updated`.
+- **AC-FE-018**: Given a user performing various interactions (navigating pages, clicking links, submitting searches, changing filters), when an error occurs, then the error report sent to `POST /t` includes a `breadcrumbs` array containing up to 50 recent activity entries in chronological order.
+- **AC-FE-019**: Given the breadcrumb buffer already contains 50 entries, when a new interaction occurs, then the oldest entry is evicted and the new entry is appended (ring buffer behavior).
+- **AC-FE-020**: Given a network failure when sending an error report to `POST /t`, when the first attempt fails, then the system retries with exponential backoff (1s, 2s, 4s, 8s, 16s) up to 5 attempts without showing any UI feedback.
+- **AC-FE-021**: Given the device is offline with queued error reports, when the device comes back online, then all queued error reports are flushed immediately.
+- **AC-FE-022**: Given all 5 retry attempts fail due to a backend error response (not 503), when the final retry is exhausted, then a modal is displayed containing the formatted error log, a "Copy to clipboard" button, a link to `/socials`, and a privacy note linking to `/privacy`.
+- **AC-FE-023**: Given all 5 retry attempts fail due to persistent network unavailability or 503 responses, when the final retry is exhausted, then no modal is displayed (silent failure).
+- **AC-FE-024**: Given the error report modal is displayed, when the user clicks "Copy to clipboard", then the error log text (excluding JWT token and visitor_session_id) is copied to the clipboard with a "Copied!" confirmation.
