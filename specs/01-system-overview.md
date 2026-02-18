@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 3.0
+version: 3.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -19,10 +19,10 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | -------------- | -------------------------------------- | ---------------------------------------- |
 | Frontend       | Nuxt 4 / Vue 3 / Vite (SPA mode)      | Firebase Hosting + Firebase Functions    |
 | Backend API    | Go                                     | Google Cloud Run (asia-southeast1)       |
-| Sitemap Gen    | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
-| Log Processing | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
-| Offender Cleanup | Node.js (Cloud Functions Gen 2)      | Google Cloud Functions (asia-southeast1) |
-| Embedding Sync | Node.js (Cloud Functions Gen 2)        | Google Cloud Functions (asia-southeast1) |
+| Sitemap Gen    | Node.js 22 LTS (Cloud Functions Gen 2) | Google Cloud Functions (asia-southeast1) |
+| Log Processing | Node.js 22 LTS (Cloud Functions Gen 2) | Google Cloud Functions (asia-southeast1) |
+| Offender Cleanup | Node.js 22 LTS (Cloud Functions Gen 2) | Google Cloud Functions (asia-southeast1) |
+| Embedding Sync | Node.js 22 LTS (Cloud Functions Gen 2) | Google Cloud Functions (asia-southeast1) |
 | Database       | Firestore Enterprise (MongoDB compatibility mode) | Google Cloud (asia-southeast1)  |
 | Vector Search  | Firestore Native Mode                  | Google Cloud (asia-southeast1)           |
 | Embedding      | Vertex AI — Gemini `gemini-embedding-001` | Google Cloud (asia-southeast1)           |
@@ -33,6 +33,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | DNS            | Google Cloud DNS                       | Google Cloud                             |
 | Container Registry | Google Artifact Registry           | Google Cloud (asia-southeast1)           |
 | Media Storage    | Google Cloud Storage                 | Google Cloud (asia-southeast1)           |
+| GeoIP          | MaxMind GeoLite2-Country (embedded)  | Bundled in Docker image                  |
 | Observability  | Google Cloud Logging + Cloud Monitoring + BigQuery | Google Cloud                |
 | Analytics      | Looker Studio                          | Google Cloud (owner-operated)            |
 | IaC            | Terraform (HashiCorp)                  | This repository (`/terraform/`)          |

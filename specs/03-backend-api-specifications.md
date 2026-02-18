@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 2.7
+version: 2.8
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -74,7 +74,7 @@ tags: [backend, api, go, cloud-run, breadcrumbs]
 | `auth_check`         | After authentication/authorization decision                        | Auth result (`pass`, `fail`, `ban_tier`), relevant identifiers                 |
 | `validation`         | After input validation                                              | Validation result (`pass`, `fail`), which fields failed (no raw values)        |
 | `db_query`           | Before and after each database operation                            | Collection name, operation type (`find`, `findOne`, `aggregate`), filter keys (not values), result count, latency (ms) |
-| `cache_lookup`       | On cache check (hit or miss)                                       | Cache type (`embedding_cache`, `image_cache`, `sitemap_cache`), key identifier, result (`hit`, `miss`) |
+| `cache_lookup`       | On cache check (hit or miss)                                       | Cache type (`embedding_cache`), key identifier, result (`hit`, `miss`) |
 | `external_api_call`  | Before and after Vertex AI or other external API calls              | Service name, operation, latency (ms), status (`success`, `error`)             |
 | `vector_search`      | After vector similarity search                                      | Collection queried, result count, distance threshold applied, candidates returned |
 | `filter_applied`     | When filters are applied to query results                           | Filter names and operator types (not filter values), result count after filter |
@@ -336,8 +336,8 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 1. **Normalize**: Convert the search query to lowercase.
 2. **Generate cache key**: Compute UUID v5 from the lowercased query using the URL namespace (`6ba7b811-9dad-11d1-80b4-00c04fd430c8`) and the lowercased query as the name.
 3. **Check embedding cache**: Look up the UUID in the `embedding_cache` collection (DM-011) in Firestore Enterprise.
-   - **Cache hit**: Use the cached embedding vector.
-   - **Cache miss**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_QUERY` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before storage. Store the UUID and normalized vector in the `embedding_cache` collection (no search string stored). No cache expiration.
+   - **Cache hit**: Verify the cached entry's `model_version` matches the current model version. If it matches, use the cached embedding vector. If it does not match, treat as a cache miss (re-generate embedding and update the cache entry). (CLR-136)
+   - **Cache miss**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_QUERY` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before storage. Store the UUID, normalized vector, and current `model_version` in the `embedding_cache` collection (no search string stored). No cache expiration.
 4. **Vector search**: Query the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors` — see DM-012) using the embedding vector with `findNearest()` (cosine distance). Exclude results with cosine distance > **0.35** (configurable threshold — see AD-020).
 5. **Apply filters**: If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), query Firestore Enterprise with the candidate document IDs from step 4 AND the filter criteria applied. If no filters, retrieve full documents from Firestore Enterprise by document IDs.
 6. **Sort**: Sort results by cosine distance ascending (most similar first).
@@ -835,3 +835,5 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-020**: Given an API request that completes successfully, when the response is sent, then no breadcrumb data is persisted or logged (breadcrumbs are discarded on success).
 - **AC-API-021**: Given an API request processing a vector search with filters (`GET /technical?q=...&category=...`), when an error occurs during the database query step, then the `server_breadcrumbs` in the error log show each step: request received, validation, embedding cache lookup, Vertex AI call (if cache miss), vector search results, filter application, and the failing database query — with latency measurements for each step.
 - **AC-API-022**: Given the breadcrumb trail records a database query, when the log is inspected, then filter field names (keys) are present but filter values are NOT present (privacy constraint).
+- **AC-API-GEO-001**: Given a `POST /t` request, when the backend processes the request, then it SHALL resolve `geo_country` from the client's truncated IP address using the embedded GeoIP database, and include it in the structured log entry. (CLR-137)
+- **AC-API-GEO-002**: Given a `POST /t` request where the GeoIP lookup fails or returns no result, then the system SHALL set `geo_country` to `"unknown"` in the structured log entry. (CLR-137)

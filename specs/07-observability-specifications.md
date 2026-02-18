@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 3.1
+version: 3.2
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -23,7 +23,7 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 The following examples illustrate the three distinct log entry types. Each example shows only the fields relevant to that entry type.
 
-**Example 1 — Standard Backend Error Log** (e.g., GET /technical with a masked 500):
+**Example 1 — Standard Backend Error Log** (e.g., GET /technical with a masked 500) (CLR-139):
 
 ```json
 {
@@ -31,16 +31,16 @@ The following examples illustrate the three distinct log entry types. Each examp
   "timestamp": "2026-02-17T10:30:00Z",
   "request_id": "uuid-v4",
   "method": "GET",
-  "path": "/technical/invalid-slug.md",
+  "path": "/technical/my-article-2026-01-15-1030.md",
   "query_params": "",
   "client_ip": "203.0.113.0",
   "user_agent": "Mozilla/5.0...",
   "status_code": 404,
-  "latency_ms": 235,
-  "message": "Article not found",
+  "latency_ms": 10235,
+  "message": "Internal error masked as 404",
   "error": {
-    "type": "NotFoundError",
-    "message": "No article with slug 'invalid-slug'",
+    "type": "DeadlineExceeded",
+    "message": "Firestore query timed out after 10000ms",
     "stack": "..."
   },
   "labels": {
@@ -50,8 +50,8 @@ The following examples illustrate the three distinct log entry types. Each examp
     {
       "timestamp": "2026-02-17T10:30:00.100000Z",
       "step": "request_received",
-      "message": "GET /technical/invalid-slug.md",
-      "data": { "method": "GET", "path": "/technical/invalid-slug.md" }
+      "message": "GET /technical/my-article-2026-01-15-1030.md",
+      "data": { "method": "GET", "path": "/technical/my-article-2026-01-15-1030.md" }
     },
     {
       "timestamp": "2026-02-17T10:30:00.102000Z",
@@ -66,10 +66,10 @@ The following examples illustrate the three distinct log entry types. Each examp
       "data": { "collection": "technical_articles", "operation": "findOne" }
     },
     {
-      "timestamp": "2026-02-17T10:30:00.235000Z",
+      "timestamp": "2026-02-17T10:30:10.235000Z",
       "step": "error",
-      "message": "Article not found",
-      "data": { "error_type": "NotFoundError" }
+      "message": "Firestore query timed out",
+      "data": { "error_type": "DeadlineExceeded", "timeout_ms": 10000 }
     }
   ],
   "cloud_run_instance": "instance-abc123"
@@ -305,6 +305,8 @@ const speedInfo = connection ? {
 } : null;
 ```
 
+> **Note**: This example shows the raw browser API values. The frontend converts `effectiveType` to `effective_type` before sending to the backend (see FE-COMP-004, CLR-130). The backend receives and logs snake_case field names. (CLR-138)
+
 **Error Categories to Track**:
 
 | Category              | Examples                                    |
@@ -347,8 +349,6 @@ The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (
 | `embedding_api_duration_ms`    | Histogram | —                         | Gemini embedding API call latency |
 | `vector_search_duration_ms`    | Histogram | collection                | Firestore Native vector search latency |
 | `vector_search_candidates`     | Histogram | collection                | Number of candidates returned per vector search |
-| `image_cache_hits_total`       | Counter   | —                         | Image cache hits (CLR-108)             |
-| `image_cache_misses_total`     | Counter   | —                         | Image cache misses (Cloud Storage fetch) (CLR-108) |
 
 **Cloud Armor Metrics** (sourced from Cloud Monitoring, not application-level):
 

@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 3.4
+version: 3.5
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -66,7 +66,7 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-stu
 
 **Configuration**:
 
-- Function runtime: Node.js (as required by Nuxt/Nitro)
+- Function runtime: Node.js 22 LTS (as required by Nuxt/Nitro) (CLR-135)
 - Region: `asia-southeast1` (same as Cloud Run for consistency)
 - Purpose: Serve the SPA `index.html` shell for all client-side routes
 - Memory: 256 MB (minimal, only serving static HTML)
@@ -115,6 +115,9 @@ COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /etc/group /etc/group
 
 COPY --from=builder /app/server /server
+
+# GeoIP database for country-level resolution from truncated IPs (CLR-133)
+COPY GeoLite2-Country.mmdb /data/GeoLite2-Country.mmdb
 
 # Run as non-root user 'jack' — no root credentials or privileges
 USER jack:jack
@@ -294,7 +297,7 @@ ENTRYPOINT ["/server"]
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
 | Function name        | `generate-sitemap`                                 |
-| Runtime              | Node.js (Cloud Functions Gen 2)                    |
+| Runtime              | Node.js 22 LTS (Cloud Functions Gen 2) (CLR-135)  |
 | Region               | `asia-southeast1`                                  |
 | Memory               | 256 MB                                             |
 | Timeout              | 60 seconds                                         |
@@ -341,7 +344,7 @@ ENTRYPOINT ["/server"]
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
 | Function name        | `process-rate-limit-logs`                          |
-| Runtime              | Node.js (Cloud Functions Gen 2)                    |
+| Runtime              | Node.js 22 LTS (Cloud Functions Gen 2) (CLR-135)  |
 | Region               | `asia-southeast1`                                  |
 | Memory               | 256 MB                                             |
 | Timeout              | 60 seconds                                         |
@@ -396,7 +399,7 @@ ENTRYPOINT ["/server"]
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
 | Function name        | `cleanup-rate-limit-offenders`                     |
-| Runtime              | Node.js (Cloud Functions Gen 2)                    |
+| Runtime              | Node.js 22 LTS (Cloud Functions Gen 2) (CLR-135)  |
 | Region               | `asia-southeast1`                                  |
 | Memory               | 256 MB                                             |
 | Timeout              | 60 seconds                                         |
@@ -465,7 +468,7 @@ ENTRYPOINT ["/server"]
 
 - Cloud Run and Cloud Functions SHALL route all egress traffic through the VPC via **Direct VPC Egress** in **Production**.
 - Egress SHALL be restricted to Google Cloud API endpoints only (via Private Google Access).
-- No outbound internet access is required — all external dependencies are Google Cloud services.
+- No outbound internet access is required — all external dependencies are Google Cloud services. GeoIP resolution uses an embedded database file (MaxMind GeoLite2-Country) bundled in the Docker image — no external API calls required (CLR-133).
 - No Cloud NAT router is provisioned to minimize cost and attack surface.
 - In **Development**, no VPC is provisioned. Services connect to Google Cloud APIs directly to reduce cost.
 
@@ -706,6 +709,7 @@ Terraform manages GCP resources defined in the spec, including but not limited t
 - Cloud Scheduler jobs (INFRA-008b, INFRA-008e, INFRA-014b)
 - Pub/Sub topics and subscriptions (INFRA-008c log sink trigger — `rate-limit-events` topic)
 - Cloud Logging log sinks — BigQuery sinks (INFRA-010a–010e) + Pub/Sub sink for rate-limit events (INFRA-008c)
+- BigQuery dataset (`website_logs`, INFRA-010) (CLR-140)
 - Cloud Logging default bucket retention configuration (INFRA-007)
 - Firestore Native database (INFRA-012)
 - Artifact Registry (INFRA-018)
@@ -845,7 +849,7 @@ Terraform and the Application CI/CD pipeline have complementary but distinct res
 **Notes**:
 
 - Expected storage: < 100 MB (a small personal website with limited images). Well within Cloud Storage's 5 GB free tier.
-- The Go backend caches images in memory for 30 days to reduce Cloud Storage read operations (see BE-API-013).
+- The Go backend proxies images directly from Cloud Storage on each request. Cloud Storage serves as the authoritative source with no application-level caching. The frontend relies on HTTP `Cache-Control` headers for browser-level caching (see BE-API-013). (CLR-132)
 - Terraform manages the bucket resource (INFRA-016).
 
 ---
@@ -949,9 +953,9 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
 | ------------------------- | --------------------------------------------- | -------------------------------------- | --------- |
 | `all_logs`                | Truncated IP addresses                        | IP last octet zeroed                   | 2 years   |
 | `cloud_armor_lb_logs`     | **Full** IP, User-Agent (browser/OS info)     | No IP truncation (infrastructure-generated logs); 90-day retention | 90 days |
-| `frontend_error_logs`     | Truncated IP, browser name/version            | IP last octet zeroed                   | 2 years   |
+| `frontend_error_logs`     | Truncated IP, browser name/version, geo_country | IP last octet zeroed                   | 2 years   |
 | `backend_error_logs`      | Truncated IP (in request context)             | IP last octet zeroed                   | 2 years   |
-| `frontend_tracking_logs`  | Truncated IP, browser, referrer, page visited | IP last octet zeroed                   | 2 years   |
+| `frontend_tracking_logs`  | Truncated IP, browser, referrer, page visited, geo_country | IP last octet zeroed                   | 2 years   |
 
 **Notes**:
 - Log sinks operate independently of the existing Cloud Logging log buckets and the rate-limit log sink (INFRA-008c). They do not interfere with each other.

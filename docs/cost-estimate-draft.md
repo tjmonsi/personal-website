@@ -1,6 +1,6 @@
 ---
 title: Draft Cost Estimate — GCP Monthly Costs
-version: 1.1-draft
+version: 1.2-draft
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -31,6 +31,8 @@ This document provides a rough cost estimate for running the personal website in
 - **Error retry with exponential backoff (FE-COMP-005-RETRY)**: Up to 3 additional Cloud Run requests per failed request. At ~100 errors/month (normal), worst case is ~300 extra requests. Negligible Cloud Run CPU cost (<$0.001/month).
 - **Error modal (FE-COMP-005-MODAL)**: Pure frontend component. No backend cost impact.
 - **Server-side breadcrumbs (BE-BREADCRUMB)**: Slight increase in error-severity log entry size. Negligible at current volumes.
+- **Image cache removed (CLR-121)**: In-memory image cache removed from BE-API-013. No cost impact — caching was in-process memory only.
+- **GeoIP (CLR-133)**: MaxMind GeoLite2-Country embedded database (~5 MB) bundled in Docker image. $0.00 (free database, GeoLite2 license requires free MaxMind registration).
 - **Cost tables and totals unchanged** — all new features have zero measurable cost impact at both normal and spike traffic levels.
 
 ### Changes from v0.9-draft
