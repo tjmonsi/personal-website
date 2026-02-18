@@ -72,7 +72,7 @@ tags: [frontend, nuxt4, vue3, spa]
   - Tags (multi-select)
   - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter with values `all` or `any`. Default: "Match Any")
   - Date range for "last updated" (date picker range, filters on `date_updated`)
-- **Results are always sorted by `date_updated` descending** (most recently updated first). No sort controls are displayed to the user.
+- WHEN no search query (`q`) is active, results SHALL be sorted by `date_updated` descending (most recently updated first). WHEN a search query is active, results SHALL be sorted by relevance (vector similarity — most relevant first). No sort controls are displayed to the user.
 - **Desktop pagination**:
   - THE SYSTEM SHALL paginate results showing the current page number and total pages.
   - THE SYSTEM SHALL display navigation buttons:
@@ -201,7 +201,7 @@ tags: [frontend, nuxt4, vue3, spa]
   - Tags (multi-select)
   - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter. Default: "Match Any")
   - Date range (filters on `date_updated`)
-- **Results are always sorted by `date_updated` descending** (most recently updated first). No sort controls are displayed to the user.
+- WHEN no search query (`q`) is active, results SHALL be sorted by `date_updated` descending (most recently updated first). WHEN a search query is active, results SHALL be sorted by relevance (vector similarity — most relevant first). No sort controls are displayed to the user.
 - THE SYSTEM SHALL paginate results (same behavior as FE-PAGE-002: desktop pagination, mobile infinite scroll).
 - **URL State Synchronization** (see FE-COMP-011):
   - THE SYSTEM SHALL reflect the current search and filter state in the browser URL query parameters.
@@ -662,3 +662,5 @@ tags: [frontend, nuxt4, vue3, spa]
 - **AC-FE-013**: Given a user visiting `/changelog`, when the page loads, then a chronological list of frontend changes is displayed.
 - **AC-FE-014**: Given a user visiting `/privacy`, when the page loads, then the static privacy policy content is displayed with all required sections.
 - **AC-FE-015**: Given WCAG 2.1 Level AA requirements, when any page is audited, then all interactive elements are keyboard navigable and color contrast meets minimum requirements.
+- **AC-FE-016**: Given a user on `/technical`, `/blog`, or `/others` with no search query active, when articles are displayed, then they are ordered by most recently updated first (`date_updated` descending).
+- **AC-FE-017**: Given a user on `/technical`, `/blog`, or `/others` with a search query active, when results are displayed, then they are ordered by relevance to the search query (most relevant first), not by `date_updated`.

@@ -1,8 +1,8 @@
 ---
 title: Backend API Specifications
-version: 2.2
+version: 2.3
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-18
 owner: TJ Monserrat
 tags: [backend, api, go, cloud-run]
 ---
@@ -150,7 +150,9 @@ tags: [backend, api, go, cloud-run]
 **Behavior**:
 
 - THE SYSTEM SHALL return exactly 10 items per page (fixed, not configurable by the client).
-- THE SYSTEM SHALL sort results by `date_updated` in descending order (most recently updated first) when no search query (`q`) is present. When `q` is present, results are sorted by vector similarity (cosine distance ascending). This is the only sort order; no `sort_by` or `sort_order` parameters are accepted.
+- WHEN the `q` parameter is NOT present, THE SYSTEM SHALL sort results by `date_updated` in descending order (most recently updated first).
+- WHEN the `q` parameter IS present, THE SYSTEM SHALL sort results by vector similarity (cosine distance ascending — most relevant first). The `date_updated` field SHALL NOT influence sort order when a search query is active.
+- These are the only sort orders; no `sort_by` or `sort_order` parameters are accepted.
 - WHEN the `q` parameter is present, THE SYSTEM SHALL use vector similarity search (see **Vector Search Flow** below) instead of text search.
 - WHEN the `q` parameter is NOT present, THE SYSTEM SHALL query Firestore Enterprise directly, applying any filters (category, tags, date range).
 - IF the search/filter yields no results, THE SYSTEM SHALL return `200` with an empty `items` array and `pagination.total_items` of `0`. Example response:
@@ -641,3 +643,9 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-010**: Given a `GET /images/{path}` request for a non-image object, when processed, then the response returns `404`.
 - **AC-API-011**: Given a valid `GET /sitemap.xml` request, when a sitemap exists in Firestore, then the response returns `200` with `application/xml` and `Cache-Control: public, max-age=3600`.
 - **AC-API-012**: Given the Go backend has previously served an image, when the same image is requested within 30 days, then the image is served from the in-memory cache without reading Cloud Storage.
+- **AC-API-013**: Given a `GET /technical` request without a `q` parameter, when articles exist, then the response items are sorted by `date_updated` descending (most recently updated first).
+- **AC-API-014**: Given a `GET /technical` request with a `q` parameter, when matching articles exist, then the response items are sorted by vector similarity (cosine distance ascending — most relevant first), not by `date_updated`.
+- **AC-API-015**: Given a `GET /blog` request without a `q` parameter, when articles exist, then the response items are sorted by `date_updated` descending.
+- **AC-API-016**: Given a `GET /blog` request with a `q` parameter, when matching articles exist, then the response items are sorted by vector similarity (cosine distance ascending), not by `date_updated`.
+- **AC-API-017**: Given a `GET /others` request without a `q` parameter, when items exist, then the response items are sorted by `date_updated` descending.
+- **AC-API-018**: Given a `GET /others` request with a `q` parameter, when matching items exist, then the response items are sorted by vector similarity (cosine distance ascending), not by `date_updated`.
