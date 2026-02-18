@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 2.8
+version: 2.9
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -835,5 +835,5 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-020**: Given an API request that completes successfully, when the response is sent, then no breadcrumb data is persisted or logged (breadcrumbs are discarded on success).
 - **AC-API-021**: Given an API request processing a vector search with filters (`GET /technical?q=...&category=...`), when an error occurs during the database query step, then the `server_breadcrumbs` in the error log show each step: request received, validation, embedding cache lookup, Vertex AI call (if cache miss), vector search results, filter application, and the failing database query — with latency measurements for each step.
 - **AC-API-022**: Given the breadcrumb trail records a database query, when the log is inspected, then filter field names (keys) are present but filter values are NOT present (privacy constraint).
-- **AC-API-GEO-001**: Given a `POST /t` request, when the backend processes the request, then it SHALL resolve `geo_country` from the client's truncated IP address using the embedded GeoIP database, and include it in the structured log entry. (CLR-137)
+- **AC-API-GEO-001**: Given a `POST /t` request, when the backend processes the request, then it SHALL resolve `geo_country` from the client IP address prior to truncation using the embedded GeoIP database; only the country code is retained — the full IP is discarded immediately after lookup. The resolved `geo_country` is included in the structured log entry. (CLR-137, CLR-144)
 - **AC-API-GEO-002**: Given a `POST /t` request where the GeoIP lookup fails or returns no result, then the system SHALL set `geo_country` to `"unknown"` in the structured log entry. (CLR-137)

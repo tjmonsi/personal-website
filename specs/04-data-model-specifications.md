@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 2.5
+version: 2.6
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -251,7 +251,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | Field          | Type       | Required | Description                                    |
 | -------------- | ---------- | -------- | ---------------------------------------------- |
 | `_id`          | string     | Yes      | UUID v5 of the lowercased search text (namespace: `6ba7b811-9dad-11d1-80b4-00c04fd430c8`, name: lowercased query string) |
-| `vector`       | double[]   | Yes      | 2048-dimensional embedding vector from Gemini `gemini-embedding-001` (L2-normalized) |
+| `vector`       | double[]   | Yes      | 2048-dimensional embedding vector from Gemini `gemini-embedding-001` (L2-normalized). The field is named `vector` (rather than `embedding`) to distinguish cached search-query vectors from document embeddings stored in DM-012. (CLR-146) |
 | `model_version`| string     | Yes      | The embedding model identifier used to generate this vector (e.g., `gemini-embedding-001`). Used for automated cache invalidation on model upgrade (CLR-125). |
 | `created_at`   | datetime   | Yes      | When the embedding was first cached (UTC)      |
 

@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 3.5
+version: 3.6
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -45,7 +45,7 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-stu
         {
           "source": "/sitemap.xml",
           "run": {
-            "serviceId": "<cloud-run-service-name>",
+            "serviceId": "website-api",
             "region": "asia-southeast1"
           }
         }
@@ -91,6 +91,7 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-stu
 | Concurrency          | 160                             |
 | Request timeout      | 30 seconds                      |
 | Startup CPU boost    | Enabled                         |
+| Service name         | `website-api` (illustrative; may be adjusted during implementation) (CLR-147) |
 | Ingress              | Internal + Cloud Load Balancing |
 | VPC egress          | Connected to `personal-website-vpc` via **Direct VPC Egress** (see INFRA-009) — Production only. Development environment does NOT use a VPC. |
 
@@ -556,7 +557,7 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
 | Function name        | `sync-article-embeddings`                          |
-| Runtime              | Node.js (Cloud Functions Gen 2)                    |
+| Runtime              | Node.js 22 LTS (Cloud Functions Gen 2) (CLR-135)   |
 | Region               | `asia-southeast1`                                  |
 | Memory               | 512 MB                                             |
 | Timeout              | 300 seconds (5 minutes)                            |
@@ -908,10 +909,10 @@ Five Cloud Logging log sinks route logs to dedicated BigQuery tables within the 
 | ---------------- | -------------------------------------------------- |
 | Sink name        | `sink-backend-errors`                              |
 | Destination      | BigQuery table `website_logs.backend_error_logs`   |
-| Filter           | `resource.type="cloud_run_revision" AND resource.labels.service_name="<cloud-run-service-name>" AND severity>=ERROR AND NOT jsonPayload.log_type="frontend_error"` |
+| Filter           | `resource.type="cloud_run_revision" AND resource.labels.service_name="website-api" AND severity>=ERROR AND NOT jsonPayload.log_type="frontend_error"` |
 | Purpose          | Backend error trend analysis, masked 500 tracking  |
 
-> **Note**: The `resource.labels.service_name` filter scopes this sink to the Go backend Cloud Run service only. Without it, ERROR logs from Cloud Functions Gen 2 (which also run on Cloud Run infrastructure under `resource.type="cloud_run_revision"`) would land in this table. The actual service name is determined during implementation.
+> **Note**: The `resource.labels.service_name` filter scopes this sink to the Go backend Cloud Run service only. Without it, ERROR logs from Cloud Functions Gen 2 (which also run on Cloud Run infrastructure under `resource.type="cloud_run_revision"`) would land in this table. The service name `website-api` is illustrative (see INFRA-003) and may be adjusted during implementation. (CLR-147)
 
 ##### INFRA-010e: Frontend Tracking Logs
 
