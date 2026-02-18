@@ -27,7 +27,7 @@
 **Option B**: Keep current wording and update the schemas instead.
 
 **Answer**:
-
+Use A.
 ---
 
 ## CLR-106: Architecture Diagrams and Sitemap Missing New Components 🟡
@@ -53,7 +53,7 @@
 **Option B**: Leave diagrams as-is and add a separate "Recent Additions" note instead.
 
 **Answer**:
-
+Use A
 ---
 
 ## CLR-107: OBS-010 SLO Rolling Window Inconsistency (30-day vs 28-day) 🟡
@@ -69,7 +69,7 @@
 **Option B (Recommended)**: Use **28-day** everywhere (update OBS-010 to match AC-OBS-005). This aligns with Google Cloud Monitoring defaults and Google SRE best practices.
 
 **Answer**:
-
+Use B
 ---
 
 ## CLR-108: Image Cache Observability Metrics for BE-API-013 🟢
@@ -85,7 +85,7 @@
 **Option B**: Skip cache metrics — the cache is simple enough to debug without dedicated metrics.
 
 **Answer**:
-
+Use A
 ---
 
 ## CLR-109: Security Hardening — CSP `object-src` and Threat Model Terminology 🟢
@@ -107,7 +107,7 @@
 **Option C**: No changes.
 
 **Answer**:
-
+Use A
 ---
 
 ## CLR-110: Media Bucket Object Versioning 🟢
@@ -120,7 +120,7 @@
 **Option B (Recommended)**: Keep versioning disabled and add a note acknowledging that images can be re-uploaded from source if needed. This keeps the bucket simple for a personal website with minimal images.
 
 **Answer**:
-
+Use A
 ---
 
 ## CLR-111: Privacy Policy Does Not Mention Server-Computed `visitor_id` 🟢
@@ -134,6 +134,7 @@
 **Option B**: No change — the `visitor_id` is a non-reversible derivative of already-disclosed data and does not require separate disclosure.
 
 **Answer**:
+Use A
 
 ---
 
@@ -148,7 +149,7 @@
 **Option B**: No change — Looker Studio is not an infrastructure resource and its cost impact is already captured under BigQuery.
 
 **Answer**:
-
+Use A
 ---
 
 ## Summary
@@ -165,3 +166,7 @@
 | CLR-112 | 🟢 SUGGESTION | Cost Estimate | Looker Studio missing from cost breakdown summary |
 
 ````
+
+## Additional Notes:
+- add a tldr section at the top of the privacy policy page for quick reference. Make it clear and concise but still playful and engaging to match the website's tone. The tldr should summarize the key points of the privacy policy in a way that's easy to understand at a glance.
+- add a tldr section at the top of changelog page for quick reference. The tldr should summarize the most important recent changes in a way that's easy to understand at a glance.
