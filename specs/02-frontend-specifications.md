@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 2.3
+version: 2.4
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -404,7 +404,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - `page`: Current page URL path
   - `referrer`: Referrer URL (if available)
   - `browser`: Browser name and version (from User-Agent, determined client-side)
-  - `connection_speed`: Connection speed info from Navigator.connection API (if available)
+  - `connection_speed`: Connection speed info from Navigator.connection API (if available). The frontend SHALL convert the browser API's camelCase field names (e.g., `effectiveType`) to snake_case (e.g., `effective_type`) before sending to maintain consistency with the backend's snake_case convention (CLR-130).
 - IP address and server-side timestamp are determined by the backend from request headers.
 
 **Link Click Tracking**:
@@ -466,7 +466,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 - WHEN sending an error report to `POST /t` fails due to a network error (e.g., device is offline, DNS failure, connection refused), THE SYSTEM SHALL queue the failed payload in memory.
 - THE SYSTEM SHALL retry sending the queued payload using exponential backoff with a maximum of **5 retry attempts**.
-- Retry delay schedule: 1 second, 2 seconds, 4 seconds, 8 seconds, 16 seconds (doubling each attempt).
+- Retry delay schedule: 1 second, 2 seconds, 4 seconds, 8 seconds, 16 seconds (doubling each attempt, with ±20% random jitter applied to each delay to prevent synchronized retry storms — CLR-127). For example, a 4-second base delay becomes a random value between 3.2 and 4.8 seconds.
 - WHEN the retry succeeds, THE SYSTEM SHALL remove the payload from the queue, discard it silently, and display a brief toast notification: "Error reported. Thanks for helping improve the site!" The toast SHALL auto-dismiss after 5 seconds.
 - WHEN the device comes back online (detected via the `online` event on `window`), THE SYSTEM SHALL immediately attempt to flush all queued error reports.
 - THE SYSTEM SHALL also persist queued error reports to `sessionStorage` (key: `pending_error_reports`) so that payloads survive SPA route changes. Queued reports SHALL NOT persist across browser sessions (i.e., they are lost when the tab is closed).
@@ -495,7 +495,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 **FE-COMP-005-RETRY Component Acceptance Criteria**:
 
 - **AC-RETRY-001**: Given a network error when sending an error report, when the first attempt fails, then the payload is queued in memory and `sessionStorage`.
-- **AC-RETRY-002**: Given a queued error report, when the retry timer fires, then the system attempts redelivery with exponential backoff delays of 1s, 2s, 4s, 8s, 16s.
+- **AC-RETRY-002**: Given a queued error report, when the retry timer fires, then the system attempts redelivery with exponential backoff delays of 1s, 2s, 4s, 8s, 16s (with ±20% random jitter per delay — CLR-127).
 - **AC-RETRY-003**: Given an error report retry succeeds, when the response is `200`, then the queued payload is removed and a success toast is displayed.
 - **AC-RETRY-004**: Given a non-retryable error (HTTP `400`, `403`, `405`), when received, then the system does NOT retry and proceeds directly to failure handling.
 - **AC-RETRY-005**: Given the device is offline with queued reports, when the `online` event fires, then all queued reports are flushed immediately.

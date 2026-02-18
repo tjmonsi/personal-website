@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 3.0
+version: 3.1
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -19,7 +19,11 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 **Format**: JSON structured logs to stdout (Cloud Run automatically ingests).
 
-**Log Schema**:
+**Log Schema** (CLR-126):
+
+The following examples illustrate the three distinct log entry types. Each example shows only the fields relevant to that entry type.
+
+**Example 1 — Standard Backend Error Log** (e.g., GET /technical with a masked 500):
 
 ```json
 {
@@ -27,8 +31,8 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
   "timestamp": "2026-02-17T10:30:00Z",
   "request_id": "uuid-v4",
   "method": "GET",
-  "path": "/technical",
-  "query_params": "q=example&page=1",
+  "path": "/technical/invalid-slug.md",
+  "query_params": "",
   "client_ip": "203.0.113.0",
   "user_agent": "Mozilla/5.0...",
   "status_code": 404,
@@ -68,10 +72,84 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
       "data": { "error_type": "NotFoundError" }
     }
   ],
-  "log_type": "frontend_tracking",
   "cloud_run_instance": "instance-abc123"
 }
 ```
+
+> This example does **not** include `log_type` because it is a standard backend request (not a `POST /t` entry).
+
+**Example 2 — Frontend Tracking Log** (POST /t with action: "page_view"):
+
+```json
+{
+  "severity": "INFO",
+  "timestamp": "2026-02-17T10:35:00Z",
+  "request_id": "uuid-v4",
+  "method": "POST",
+  "path": "/t",
+  "client_ip": "203.0.113.0",
+  "user_agent": "Mozilla/5.0...",
+  "status_code": 200,
+  "latency_ms": 12,
+  "message": "Tracking event recorded",
+  "log_type": "frontend_tracking",
+  "visitor_id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+  "page": "/technical",
+  "referrer": "https://google.com",
+  "action": "page_view",
+  "browser": "Chrome 120",
+  "connection_speed": {
+    "effective_type": "4g",
+    "downlink": 10.0,
+    "rtt": 50
+  },
+  "geo_country": "PH",
+  "cloud_run_instance": "instance-abc123"
+}
+```
+
+> This example does **not** include `server_breadcrumbs` because front tracking entries are INFO-level (breadcrumbs are only on ERROR entries). It includes `log_type: "frontend_tracking"` and `geo_country`.
+
+**Example 3 — Frontend Error Log** (POST /t with action: "error_report"):
+
+```json
+{
+  "severity": "INFO",
+  "timestamp": "2026-02-17T10:36:00Z",
+  "request_id": "uuid-v4",
+  "method": "POST",
+  "path": "/t",
+  "client_ip": "203.0.113.0",
+  "user_agent": "Mozilla/5.0...",
+  "status_code": 200,
+  "latency_ms": 15,
+  "message": "Error report recorded",
+  "log_type": "frontend_error",
+  "visitor_id": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+  "page": "/technical/my-article.md",
+  "action": "error_report",
+  "browser": "Firefox 115",
+  "error_type": "network",
+  "error_message": "Failed to fetch article content",
+  "connection_speed": {
+    "effective_type": "3g",
+    "downlink": 1.5,
+    "rtt": 300
+  },
+  "breadcrumbs": [
+    {
+      "timestamp": "2026-02-17T10:35:55.100Z",
+      "type": "navigation",
+      "message": "Navigated to /technical/my-article.md",
+      "data": { "from": "/", "to": "/technical/my-article.md" }
+    }
+  ],
+  "geo_country": "SG",
+  "cloud_run_instance": "instance-abc123"
+}
+```
+
+> This example does **not** include `server_breadcrumbs` (INFO-level). It includes `log_type: "frontend_error"`, the error-specific fields (`error_type`, `error_message`, `breadcrumbs`), and `geo_country`. Note that the `breadcrumbs` array here is the **client-side** breadcrumb trail (FE-COMP-013), not the server-side `server_breadcrumbs`.
 
 > **Note on `labels`**: The `labels` field is included only when applicable. When an internal server error is masked as a 404 response, the log entry MUST include `"masked_500": true` in the `labels` object. This label is used by OBS-005 alerting to detect masked 500 errors.
 
@@ -96,8 +174,8 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 **Mandatory Logging Events**:
 
 - Every incoming request (INFO): method, path, status, latency
-- Every `POST /t` tracking request (INFO): include `log_type: "frontend_tracking"`, the `visitor_id` (server-computed hash), and the tracking payload fields (page, referrer, action, browser, connection_speed, plus action-specific fields such as `clicked_url` for `link_click` and `milestone` for `time_on_page`) in the structured log entry
-- Every `POST /t` error report (INFO): include `log_type: "frontend_error"`, the `visitor_id`, and the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs) in the structured log entry. The `breadcrumbs` array (up to 50 client-side activity entries from FE-COMP-013) is included verbatim in the log entry and flows to the `frontend_error_logs` BigQuery table
+- Every `POST /t` tracking request (INFO): include `log_type: "frontend_tracking"`, the `visitor_id` (server-computed hash), `geo_country` (from GeoIP lookup — CLR-123), and the tracking payload fields (page, referrer, action, browser, connection_speed, plus action-specific fields such as `clicked_url` for `link_click` and `milestone` for `time_on_page`) in the structured log entry
+- Every `POST /t` error report (INFO): include `log_type: "frontend_error"`, the `visitor_id`, `geo_country`, and the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs) in the structured log entry. The `breadcrumbs` array (up to 50 client-side activity entries from FE-COMP-013) is included verbatim in the log entry and flows to the `frontend_error_logs` BigQuery table
 - Rate limit triggered (WARNING): client identifier, endpoint, offense count
 - Rate limit ban applied (WARNING): client identifier, ban tier, expiry
 - Internal error masked as 404 (ERROR): full error details
@@ -166,18 +244,18 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 
 **Purpose**: Understand site usage patterns without identifying individual users.
 
-**Endpoint**: `POST /t` (authenticated via JWT Bearer Token — see SEC-003A in [06-security-specifications.md](06-security-specifications.md))
+**Endpoint**: `POST /t` (authenticated via JWT in request body — see SEC-003A in [06-security-specifications.md](06-security-specifications.md)) (CLR-128)
 
 **Data Collected**:
 
 | Data Point            | Source                          | Storage                          |
 | --------------------- | ------------------------------- | -------------------------------- |
 | Visitor ID            | Server-computed SHA-256 hash of `visitor_session_id` + truncated IP + User-Agent (see BE-API-009) | Structured log → BigQuery |
-| Visitor session ID    | Frontend-generated UUID v4 per browser session (sessionStorage) | Structured log → BigQuery |
 | Page visited          | Frontend sends via `POST /t`    | Structured log → BigQuery        |
 | Referrer URL          | Frontend sends in request body  | Structured log → BigQuery        |
 | Browser + version     | Frontend sends in request body  | Structured log → BigQuery        |
 | IP address            | Request source IP / `X-Forwarded-For` | Structured log → BigQuery  |
+| Geographic country    | GeoIP lookup on full IP before truncation (CLR-123) | Structured log → BigQuery |
 | User action           | Frontend sends action type (`page_view`, `link_click`, `time_on_page`) | Structured log → BigQuery |
 | Clicked URL           | Frontend sends target URL (for `link_click` action only) | Structured log → BigQuery |
 | Time-on-page milestone| Frontend sends milestone reached: `1min`, `2min`, `5min` (for `time_on_page` action only) | Structured log → BigQuery |
@@ -187,7 +265,7 @@ The observability strategy covers three pillars: logging, metrics, and tracing. 
 **Privacy Measures**:
 
 - No cookies or persistent cross-session tracking.
-- The `visitor_session_id` is a random UUID v4 generated per browser session and stored in `sessionStorage`. It does not persist across sessions or tabs.
+- The `visitor_session_id` is a random UUID v4 generated per browser session and stored in `sessionStorage`. It does not persist across sessions or tabs. It is used by the backend to compute the `visitor_id` hash but is **not emitted** in structured log entries and does **not** reach BigQuery (CLR-124).
 - The `visitor_id` is a SHA-256 hash of (`visitor_session_id` + truncated IP + User-Agent). It is non-reversible and cannot be used to identify real-world individuals. It exists solely to compute unique visitor counts and distinguish human browsing patterns from automated bot traffic.
 - No fingerprinting beyond truncated IP + User-Agent + session-scoped random ID.
 - IP addresses SHALL be truncated before storage: zero the last octet for IPv4 (e.g., `203.0.113.42` → `203.0.113.0`) and zero the last 80 bits for IPv6. This truncation happens in the Go backend before emitting structured log entries (which flow to BigQuery via INFRA-010).
@@ -351,7 +429,7 @@ The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (
 - Top pages by visit count
 - Referrer sources breakdown
 - Browser distribution
-- Geographic distribution (from IP)
+- Geographic distribution (by country, derived from GeoIP lookup before IP truncation — CLR-123)
 - Connection speed analysis
 - Link click analysis (most-clicked URLs, click-through rate per page)
 - Time-on-page engagement (percentage of visitors reaching 1 min, 2 min, 5 min milestones per page)

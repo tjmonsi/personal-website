@@ -1,8 +1,8 @@
 ---
 title: Data Model Specifications
-version: 2.3
+version: 2.4
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-18
 owner: TJ Monserrat
 tags: [data-model, database, firestore, mongodb, vector-search]
 ---
@@ -252,6 +252,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | -------------- | ---------- | -------- | ---------------------------------------------- |
 | `_id`          | string     | Yes      | UUID v5 of the lowercased search text (namespace: `6ba7b811-9dad-11d1-80b4-00c04fd430c8`, name: lowercased query string) |
 | `vector`       | double[]   | Yes      | 2048-dimensional embedding vector from Gemini `gemini-embedding-001` (L2-normalized) |
+| `model_version`| string     | Yes      | The embedding model identifier used to generate this vector (e.g., `gemini-embedding-001`). Used for automated cache invalidation on model upgrade (CLR-125). |
 | `created_at`   | datetime   | Yes      | When the embedding was first cached (UTC)      |
 
 **Indexes**:
@@ -264,8 +265,30 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 - Document ID (`_id`) is the UUID v5 of the lowercased search string. The same query always produces the same UUID.
 - No search strings or query text is stored anywhere in this collection.
 - No TTL / no cache expiration. Cached embeddings persist indefinitely.
-- The embedding model version (`gemini-embedding-001`) is implicit. If the model is upgraded, the cache must be invalidated (cleared) to regenerate embeddings with the new model.
+- Each cache document stores the `model_version` that was used to generate the embedding. The Go backend compares the `model_version` of each retrieved cache document against the currently configured model version. IF the versions do not match, the cached document is treated as a cache miss and the embedding is regenerated using the current model, then the document is overwritten with the new vector and updated `model_version` (CLR-125).
 - The cache stores embeddings generated with `task_type=RETRIEVAL_QUERY`. If the task type is changed, the cache must be invalidated (cleared) to regenerate embeddings with the correct task type.
+
+**Automated Cache Invalidation** (CLR-125):
+
+On each cache lookup, the Go backend SHALL:
+1. Retrieve the cache document by UUID v5.
+2. Compare the document's `model_version` field against the backend's configured embedding model version (set via environment variable, e.g., `EMBEDDING_MODEL_VERSION=gemini-embedding-001`).
+3. IF the versions match → cache hit (use the stored vector).
+4. IF the versions do not match → cache miss (call Vertex AI to generate a new embedding, overwrite the cache document with the new vector, updated `model_version`, and refreshed `created_at`).
+
+This ensures the cache self-heals incrementally when the model is upgraded, without requiring a bulk invalidation.
+
+**Manual Cache Invalidation Procedure** (CLR-125):
+
+For immediate full invalidation (e.g., during a model upgrade rollout), an operator can clear the entire cache:
+
+```
+// Via mongosh connected to Firestore Enterprise
+use <database-name>
+db.embedding_cache.deleteMany({})
+```
+
+Subsequent search queries will re-populate the cache with embeddings from the new model. This is a safe operation — the only impact is increased Vertex AI API calls until the cache is warm again.
 
 **UUID v5 Generation**:
 ```

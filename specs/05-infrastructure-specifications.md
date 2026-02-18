@@ -1,8 +1,8 @@
 ---
 title: Infrastructure Specifications
-version: 3.3
+version: 3.4
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-18
 owner: TJ Monserrat
 tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac, artifact-registry, cloud-dns, pubsub]
 ---
@@ -1170,3 +1170,7 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
 - **AC-INFRA-008**: Given DNS (INFRA-017), when `tjmonsi.com` and `api.tjmonsi.com` are resolved, then they point to the Load Balancer's IPv4 and IPv6 addresses.
 - **AC-INFRA-009**: Given the Cloud Storage media bucket (INFRA-019), when the Go backend requests an image via `GET /images/{path}`, then the Cloud Run SA has `roles/storage.objectViewer` and can read the object.
 - **AC-INFRA-010**: Given Firebase Hosting (INFRA-001), when static assets are deployed, then CSS/JS files are served with appropriate cache headers from the Firebase CDN.
+- **AC-INFRA-011**: Given the Firestore Native Mode database (INFRA-012), when vector search is performed, then the `vector-search` named database exists with vector indexes on `technical_article_vectors`, `blog_article_vectors`, and `others_vectors` collections (2048 dimensions, COSINE distance) (CLR-131).
+- **AC-INFRA-012**: Given the Vertex AI Embedding API (INFRA-013), when called with a text input and `output_dimensionality=2048`, then it returns a 2048-dimensional L2-normalized embedding vector (CLR-131).
+- **AC-INFRA-013**: Given the `sync-article-embeddings` Cloud Function (INFRA-014), when triggered, then it reads articles from Firestore Enterprise, generates embeddings via Vertex AI for new/changed articles, and writes vectors to the corresponding Firestore Native collections (CLR-131).
+- **AC-INFRA-014**: Given the Artifact Registry repository (INFRA-018), when the CI/CD pipeline pushes a Docker image, then the image is stored at `asia-southeast1-docker.pkg.dev/<project-id>/website-images/` and Cloud Run can pull from it (CLR-131).

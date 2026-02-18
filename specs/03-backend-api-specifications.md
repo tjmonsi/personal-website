@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 2.6
+version: 2.7
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -670,7 +670,10 @@ For error reporting:
 - `browser` is required (string, max 200 characters).
 - `clicked_url` is required when `action` is `link_click` (string, max 2000 characters).
 - `milestone` is required when `action` is `time_on_page` and must be one of: `1min`, `2min`, `5min`.
-- `error_type` is required when `action` is `error_report`.
+- `referrer` is optional (string, max **2000 characters**). IF the value exceeds 2000 characters, THE SYSTEM SHALL truncate it to 2000 characters before processing (CLR-122).
+- `error_type` is required when `action` is `error_report` (string, max **100 characters**). IF the value exceeds 100 characters, THE SYSTEM SHALL truncate it to 100 characters before processing (CLR-122).
+- `error_message` is optional when `action` is `error_report` (string, max **2000 characters**). IF the value exceeds 2000 characters, THE SYSTEM SHALL truncate it to 2000 characters before processing (CLR-122).
+- `connection_speed` is optional (object). Allowed keys: `effective_type` (string, max 10 characters, must be one of: `slow-2g`, `2g`, `3g`, `4g`), `downlink` (number, range 0–1000), `rtt` (integer, range 0–60000). Unknown keys SHALL be ignored. IF the object does not conform to this schema (e.g., invalid `effective_type` value or out-of-range numbers), the non-conforming fields SHALL be dropped from the logged entry (CLR-122). Note: the frontend converts from the browser Navigator.connection API's camelCase field names (e.g., `effectiveType`) to snake_case (e.g., `effective_type`) before sending (CLR-130).
 - `breadcrumbs` is optional when `action` is `error_report` (array of objects, max 50 entries). Each entry SHALL contain `timestamp` (string, ISO 8601), `type` (string, max 50 characters), `message` (string, max 300 characters), and optionally `data` (object with string or number values only). If more than 50 entries are provided, THE SYSTEM SHALL truncate to the last 50. If `breadcrumbs` is provided for actions other than `error_report`, it SHALL be ignored.
 - All other fields are optional.
 - IF validation fails, THE SYSTEM SHALL return HTTP `400`.
@@ -687,11 +690,12 @@ For error reporting:
 
 - THE SYSTEM SHALL extract the client IP from `X-Forwarded-For` or the connection source.
 - THE SYSTEM SHALL add a server-side UTC timestamp.
+- THE SYSTEM SHALL perform a GeoIP country lookup on the full (un-truncated) client IP address using a GeoIP database (e.g., MaxMind GeoLite2-Country). The resolved **country code** (ISO 3166-1 alpha-2, e.g., `PH`, `US`, `SG`) SHALL be included in the structured log entry as a `geo_country` field. IF the lookup fails or yields no result, `geo_country` SHALL be set to `"unknown"`. The full IP address is NOT stored; only the country code is retained. This lookup occurs before IP truncation (CLR-123).
 - THE SYSTEM SHALL compute a `visitor_id` by generating a SHA-256 hash of the concatenation of: `visitor_session_id` + truncated IP address + raw `User-Agent` header. The resulting hash SHALL be truncated to the first 32 hexadecimal characters. This `visitor_id` is included in every structured log entry emitted by this endpoint. It serves as a privacy-preserving, non-reversible session-scoped identifier used for unique visitor counting and bot traffic discrimination.
-- IF `action` is `"page_view"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the tracking payload fields (page, referrer, action, browser, connection_speed, truncated IP, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
-- IF `action` is `"link_click"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the click payload fields (page, clicked_url, action, browser, connection_speed, truncated IP, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
-- IF `action` is `"time_on_page"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the engagement payload fields (page, milestone, action, browser, connection_speed, truncated IP, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
-- IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs, truncated IP, timestamp, visitor_id). The `breadcrumbs` array (if present) SHALL be included in the structured log entry as-is. This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
+- IF `action` is `"page_view"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the tracking payload fields (page, referrer, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
+- IF `action` is `"link_click"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the click payload fields (page, clicked_url, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
+- IF `action` is `"time_on_page"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the engagement payload fields (page, milestone, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
+- IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs, truncated IP, geo_country, timestamp, visitor_id). The `breadcrumbs` array (if present) SHALL be included in the structured log entry as-is. This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
 - THE SYSTEM SHALL NOT write tracking or error report data to Firestore. Structured logging to stdout is the sole persistence mechanism; Cloud Logging routes these entries to BigQuery.
 - THE SYSTEM SHALL apply the standard rate limiting rules to this endpoint (see SEC-002).
 
@@ -783,8 +787,7 @@ For error reporting:
 - THE SYSTEM SHALL read the requested object from the `<project-id>-media-bucket` Cloud Storage bucket using the Cloud Storage Go SDK.
 - THE SYSTEM SHALL stream the object bytes directly to the HTTP response without buffering the entire image in memory.
 - THE SYSTEM SHALL set the `Content-Type` response header to the object's content type as reported by Cloud Storage.
-- THE SYSTEM SHALL set `Cache-Control: public, max-age=2592000` (30 days) on all successful responses.
-- THE SYSTEM SHALL implement an in-memory cache (LRU or similar) on the Go server to avoid re-fetching the same image from Cloud Storage on every request. Cached entries SHALL have a TTL of **30 days**.
+- THE SYSTEM SHALL set `Cache-Control: public, max-age=2592000` (30 days) on all successful responses. Downstream caching (browser cache, Cloud CDN if configured) is the sole caching mechanism for image responses; there is no application-level in-memory cache (CLR-121).
 - IF the requested path does not exist in the bucket, THE SYSTEM SHALL return HTTP `404`.
 - IF an internal error occurs while reading from Cloud Storage, THE SYSTEM SHALL return `404` to the client and log the actual error (consistent with the error masking strategy).
 - THE SYSTEM SHALL validate the `{path}` parameter to prevent path traversal attacks (e.g., reject paths containing `..`).
@@ -821,7 +824,7 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-009**: Given a `GET /images/{path}` request with a path containing `..`, when processed, then the response returns `404` (path traversal rejected).
 - **AC-API-010**: Given a `GET /images/{path}` request for a non-image object, when processed, then the response returns `404`.
 - **AC-API-011**: Given a valid `GET /sitemap.xml` request, when a sitemap exists in Firestore, then the response returns `200` with `application/xml` and `Cache-Control: public, max-age=3600`.
-- **AC-API-012**: Given the Go backend has previously served an image, when the same image is requested within 30 days, then the image is served from the in-memory cache without reading Cloud Storage.
+- **AC-API-012**: Given a valid `POST /t` request with a `referrer` value exceeding 2000 characters, when processed, then the `referrer` is truncated to 2000 characters in the emitted structured log entry (CLR-122).
 - **AC-API-013**: Given a `GET /technical` request without a `q` parameter, when articles exist, then the response items are sorted by `date_updated` descending (most recently updated first).
 - **AC-API-014**: Given a `GET /technical` request with a `q` parameter, when matching articles exist, then the response items are sorted by vector similarity (cosine distance ascending — most relevant first), not by `date_updated`.
 - **AC-API-015**: Given a `GET /blog` request without a `q` parameter, when articles exist, then the response items are sorted by `date_updated` descending.
