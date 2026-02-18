@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 2.7
+version: 2.8
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -227,6 +227,8 @@ const speedInfo = connection ? {
 | `embedding_api_duration_ms`    | Histogram | —                         | Gemini embedding API call latency |
 | `vector_search_duration_ms`    | Histogram | collection                | Firestore Native vector search latency |
 | `vector_search_candidates`     | Histogram | collection                | Number of candidates returned per vector search |
+| `image_cache_hits_total`       | Counter   | —                         | Image cache hits (CLR-108)             |
+| `image_cache_misses_total`     | Counter   | —                         | Image cache misses (Cloud Storage fetch) (CLR-108) |
 
 **Cloud Armor Metrics** (sourced from Cloud Monitoring, not application-level):
 
@@ -414,7 +416,7 @@ Terraform operations (`terraform plan`, `terraform apply`) are observable throug
 | Setting              | Value                                              |
 | -------------------- | -------------------------------------------------- |
 | Availability target  | 99.9% uptime                                       |
-| Compliance period    | Rolling 30-day window                              |
+| Compliance period    | Rolling 28-day window (CLR-107)                    |
 | Error budget         | 0.1% of requests may be 5xx (e.g., ~12 5xx errors per 12,000 requests/month in normal traffic) |
 
 **Alert**:

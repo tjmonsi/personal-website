@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 2.2
+version: 2.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -385,8 +385,8 @@ others_vectors (many documents) [Firestore Native]
 ### Acceptance Criteria
 
 - **AC-DM-001**: Given the Firestore Enterprise database, when the schema is initialized, then all collections (`technical_articles`, `blog_articles`, `others`, `categories`, `sitemap`, `rate_limit_offenders`) exist and accept documents matching their defined schemas.
-- **AC-DM-002**: Given a `technical_articles` document, when it is created, then all required fields (`slug`, `category`, `tags`, `title`, `abstract`, `body`, `citations`, `changelog`, `date_created`, `date_updated`) are present and correctly typed.
-- **AC-DM-003**: Given the Firestore Native database, when vector collections are synced, then each article has a corresponding vector document with a `vector` field containing a 768-dimension float array.
-- **AC-DM-004**: Given the `rate_limit_offenders` collection, when an offender document's `ban_expires_at` has passed and `active_ban` is false, then the cleanup function deletes the document after 90 days of inactivity.
+- **AC-DM-002**: Given a `technical_articles` document, when it is created, then all required fields (`slug`, `category`, `tags`, `title`, `abstract`, `content`, `changelog`, `date_created`, `date_updated`) are present and correctly typed. (CLR-105)
+- **AC-DM-003**: Given the Firestore Native database, when vector collections are synced, then each article has a corresponding vector document with a `vector` field containing a 2048-dimension float array. (CLR-105)
+- **AC-DM-004**: Given the `rate_limit_offenders` collection, when an offender document's `current_ban` is null or `current_ban.end` has passed and no offenses in the last 90 days, then the cleanup function deletes the document. (CLR-105)
 - **AC-DM-005**: Given a query on `technical_articles` with filters on `category`, `tags`, and `date_updated`, when the query executes, then the defined compound indexes support the query without a full collection scan.
 - **AC-DM-006**: Given the `slug` field on any article collection, when a duplicate slug is inserted, then the unique index prevents the insertion.

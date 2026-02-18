@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 2.9
+version: 3.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -106,8 +106,9 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 │  /blog              │  │  │  GET  /others               │ │
 │  /blog/:slug.md     │  │  │  GET  /categories           │ │
 │  /socials           │  │  │  GET  /robots.txt           │ │
-│  /others            │  │  │  GET  /health (internal)    │ │
-│  /privacy           │  │  │  POST /t                    │ │
+│  /others            │  │  │  GET  /images/{path}        │ │
+│  /privacy           │  │  │  GET  /health (internal)    │ │
+│  /changelog         │  │  │  POST /t                    │ │
 └─────────────────────┘  │  └─────────────┬──────────────┘ │
                          │                │                 │
                          │                ▼                 │
@@ -117,6 +118,15 @@ A personal website for TJ Monserrat serving as a professional online presence wi
                          │  │  asia-southeast1           │  │
                          │  └────────────┬───────────────┘  │
                          │               ▲                  │
+                         │  ┌────────────────────────────┐  │
+                         │  │  Cloud Storage             │  │
+                         │  │  <project-id>-media-bucket │  │
+                         │  │  (images for articles)     │  │
+                         │  └────────────────────────────┘  │
+                         │               ▲                  │
+                         │  Cloud Run reads via             │
+                         │  GET /images/{path}              │
+                         │                                   │
                          │  ┌────────────┴───────────────┐  │
 Cloud Scheduler ────────▶│  │  Cloud Function (Gen 2)    │  │
                          │  │  Sitemap Generation       │  │

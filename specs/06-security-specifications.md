@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 2.9
+version: 3.0
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -20,7 +20,7 @@ tags: [security, rate-limiting, cors, authentication, vector-search, terraform, 
 | Information disclosure        | Never return 500, sanitize error responses            | Application    |
 | Brute-force API abuse         | Progressive rate limiting and banning                 | Application    |
 | Bot abuse                     | robots.txt, rate limiting, Cloud Armor bot management | Both           |
-| Unauthorized tracking abuse   | JWT bearer token authentication on POST /t            | Application    |
+| Unauthorized tracking abuse   | JWT authentication via request body `token` field on POST /t (CLR-109) | Application    |
 | Analytics data exposure       | Least-privilege service account with read-only BigQuery access | Infrastructure |
 | Embedding API abuse           | Embedding cache prevents redundant Gemini API calls; rate limiting on search endpoints | Application + Infrastructure |
 | Vector data exfiltration       | Firestore Native IAM; vectors contain no readable text         | Infrastructure |
@@ -247,7 +247,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | Header                         | Value                                                     |
 | ------------------------------ | --------------------------------------------------------- |
-| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'` |
+| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'; object-src 'none'` |
 | `X-Content-Type-Options`       | `nosniff`                                                 |
 | `X-Frame-Options`              | `DENY`                                                    |
 | `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`                     |
@@ -272,7 +272,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
           { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
           { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
           { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'" }
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'; object-src 'none'" }
         ]
       }
     ]

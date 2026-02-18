@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 2.0
+version: 2.1
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -274,8 +274,9 @@ tags: [frontend, nuxt4, vue3, spa]
 - WHEN the user visits `/privacy`, THE SYSTEM SHALL display a static privacy policy page.
 - THE SYSTEM SHALL hardcode the privacy policy content in the frontend (no backend endpoint needed).
 - THE SYSTEM SHALL display a "Last updated" date at the top of the privacy policy.
+- THE SYSTEM SHALL display a **TL;DR section** at the top of the privacy policy, before the detailed sections. The TL;DR SHALL be clear, concise, and playful in tone to match the website's personality. It SHALL summarize the key points at a glance (e.g., "No cookies. No accounts. No tracking you across the internet. We just count page views with anonymized data and delete everything after 2 years. That's it."). (Additional Note, Batch 0014)
 - THE SYSTEM SHALL include the following sections in the privacy policy:
-  - **Data We Collect**: Truncated IP address (last octet zeroed for IPv4, last 80 bits zeroed for IPv6), browser name and version, pages visited, referrer URL, link clicks (which URLs you click on), time-on-page engagement milestones (whether you stay on a page for 1, 2, or 5 minutes), connection speed information, a randomized session identifier (not linked to your identity), and timestamps. No full IP addresses are stored.
+  - **Data We Collect**: Truncated IP address (last octet zeroed for IPv4, last 80 bits zeroed for IPv6), browser name and version, pages visited, referrer URL, link clicks (which URLs you click on), time-on-page engagement milestones (whether you stay on a page for 1, 2, or 5 minutes), connection speed information, a randomized session identifier (not linked to your identity), a non-reversible session-scoped identifier derived from the session ID, truncated IP address, and browser information (used for unique visitor counting) (CLR-111), and timestamps. No full IP addresses are stored.
   - **How We Collect Data**: Anonymous tracking via the site's internal tracking mechanism when pages are visited, links are clicked, and engagement milestones are reached. Client-side error reporting for performance monitoring. A random session identifier is generated in your browser for each visit and is not stored after you close the tab. No cookies, session tracking, or third-party scripts are used.
   - **Purpose of Data Collection**: Understanding how helpful and engaging the site's content is to readers, monitoring site performance, improving user experience, identifying which content resonates with visitors, and discriminating between real human visitors and automated bots or scrapers that collect text without reading it. The engagement data (time on page, link clicks) helps the site owner understand whether content is genuinely useful rather than just visited.
   - **What We Do NOT Collect**: No cookies, no user accounts, no personal identification, no fingerprinting beyond truncated IP and browser information, no cross-session tracking (i.e., we cannot recognize you on a return visit), no third-party tracking scripts, no advertising data.
@@ -297,6 +298,7 @@ tags: [frontend, nuxt4, vue3, spa]
 
 - WHEN the user visits `/changelog`, THE SYSTEM SHALL display a chronological list of frontend-only changes (most recent first).
 - THE SYSTEM SHALL hardcode the changelog content in the frontend (no backend endpoint needed).
+- THE SYSTEM SHALL display a **TL;DR section** at the top of the changelog page, before the detailed entries. The TL;DR SHALL summarize the most important recent changes in a way that's easy to understand at a glance (e.g., "Latest: Dark mode support, faster search, and a new socials page layout."). (Additional Note, Batch 0014)
 - Each changelog entry SHALL include:
   - A version identifier or date
   - A brief description of changes

@@ -1,6 +1,6 @@
 ---
 title: Draft Cost Estimate — GCP Monthly Costs
-version: 0.9-draft
+version: 1.0-draft
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -251,6 +251,7 @@ This document provides a rough cost estimate for running the personal website in
 | Artifact Registry | $0.00 | $0.00 | < 500 MB Docker images, within free tier |
 | Cloud DNS | $0.20 | $0.44 | Minimal |
 | Cloud Logging/Monitoring | $0.00 | $0.00 | Within free tier (alerting, SLI/SLO monitoring included) |
+| Looker Studio | $0.00 | $0.00 | Free (owner-operated; query costs covered under BigQuery) (CLR-112) |
 | **Total** | **~$30.32** | **~$36.16** | |
 
 ### Cost Optimization Scenarios

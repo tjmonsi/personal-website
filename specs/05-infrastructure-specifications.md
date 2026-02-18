@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 3.2
+version: 3.3
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -306,7 +306,7 @@ ENTRYPOINT ["/server"]
 **Sitemap Generation Logic**:
 
 1. Query all published articles from `technical_articles` and `blog_articles` collections.
-2. Include static pages: `/`, `/technical`, `/blog`, `/socials`, `/others`, `/privacy`.
+2. Include static pages: `/`, `/technical`, `/blog`, `/socials`, `/others`, `/privacy`, `/changelog`. (CLR-106)
 3. Article URLs SHALL include the `.md` extension (e.g., `https://tjmonsi.com/technical/article-title-2025-01-15-1030.md`).
 4. Build sitemap XML per the [Sitemaps protocol](https://www.sitemaps.org/protocol.html).
 5. Write the generated XML to the `sitemap` Firestore collection (DM-010).
@@ -834,7 +834,7 @@ Terraform and the Application CI/CD pipeline have complementary but distinct res
 | Storage class        | Standard                           |
 | Access control       | Uniform (no per-object ACLs)       |
 | Public access        | Not public (accessed only via Go backend) |
-| Versioning           | Disabled                           |
+| Versioning           | Enabled (CLR-110)                  |
 
 **Access Control**:
 
@@ -1046,13 +1046,23 @@ The following analytics are enabled by the BigQuery data via Looker Studio:
 │               │       │  │   0-N inst.   │             │
 │  Rewrites:    │       │  └───────┬───────┘             │
 │  /sitemap.xml─│───────│──────────┘                     │
-└───────────────┘       │          │                      │
-                        │          ▼                      │
+│               │       │          │                      │
+│  Pages:       │       │          ▼                      │
+│  / /technical │       │  ┌───────────────┐             │
+│  /blog /others│       │  │   Firestore   │             │
+│  /socials     │       │  │   Enterprise  │             │
+│  /privacy     │       │  │   asia-se1    │             │
+│  /changelog   │       │  └───────┬───────┘             │
+└───────────────┘       │          ▲                      │
+                        │          │                      │
                         │  ┌───────────────┐             │
-                        │  │   Firestore   │             │
-                        │  │   Enterprise  │             │
-                        │  │   asia-se1    │             │
-                        │  └───────┬───────┘             │
+                        │  │ Cloud Storage │             │
+                        │  │ media-bucket  │             │
+                        │  │ (images)      │             │
+                        │  └───────────────┘             │
+                        │          ▲                      │
+                        │  Cloud Run reads               │
+                        │  GET /images/{path}             │
                         │          ▲                      │
                         │  ┌───────┴───────┐             │
 Cloud Scheduler ───────▶│  │Cloud Function │             │
