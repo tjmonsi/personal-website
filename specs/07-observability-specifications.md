@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 2.8
+version: 2.9
 date_created: 2026-02-17
 last_updated: 2026-02-17
 owner: TJ Monserrat
@@ -445,5 +445,5 @@ Terraform operations (`terraform plan`, `terraform apply`) are observable throug
 - **AC-OBS-003**: Given the `robots.txt` file at `tjmonsi.com/robots.txt`, when crawled, then it includes `Sitemap: https://tjmonsi.com/sitemap.xml` and disallows `/t`.
 - **AC-OBS-004**: Given the Cloud Monitoring alerting (OBS-005), when email notification channels are configured, then alert policies fire on the defined conditions and send email notifications.
 - **AC-OBS-005**: Given the SLI/SLO (OBS-010), when the backend availability drops below 99.9% over the rolling 28-day window, then a fast-burn alert fires.
-- **AC-OBS-006**: Given the Looker Studio dashboard (OBS-009), when connected to BigQuery, then it displays unique visitors, page views, popular pages, referrer sources, and browser distribution from `frontend_tracking_logs`.
+- **AC-OBS-006**: Given the Looker Studio dashboard (OBS-006), when connected to BigQuery, then it displays unique visitors, page views, popular pages, referrer sources, and browser distribution from `frontend_tracking_logs`.
 - **AC-OBS-007**: Given the structured logging format, when any log entry is emitted by the Go backend, then it includes a `request_id` (UUID v4) for correlation.
