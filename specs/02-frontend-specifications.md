@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 2.7
+version: 2.8
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -675,9 +675,19 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 **Service Worker Update Notification**:
 
-- WHEN a new version of the service worker is detected (e.g., after a frontend deployment), THE SYSTEM SHALL display an update snackbar informing the user that a new version of the website is available.
+- WHEN a new version of the service worker is detected (e.g., after a frontend deployment), THE SYSTEM SHALL display an update snackbar with a humorous, randomly selected message.
 - The update snackbar SHALL include:
-  - A message: "A new version of the website is available."
+  - A message randomly selected from a predefined list of lighthearted update messages. The list SHALL contain at least 10 messages. Examples:
+    - "The owner just decided the frontend needs an update."
+    - "Something changed. Probably for the better. No promises."
+    - "New version just dropped. We're basically a AAA game studio now."
+    - "Plot twist: the website got an update."
+    - "The hamsters powering this site learned a new trick."
+    - "Fresh code, straight from the oven. Smells like progress."
+    - "Minor tweaks. Major vibes."
+    - "We moved some pixels around. You're welcome."
+    - "The website leveled up. It's super effective!"
+    - "Patch notes: made things slightly less broken."
   - A link to the changelog page (`/changelog`, see FE-PAGE-010) so the user can review what changed.
   - A "Refresh now" button that activates the new service worker and reloads the page.
   - A manual dismiss button.
@@ -819,7 +829,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-009**: Given a user clicking an anchor element, when the click event fires, then a `link_click` tracking event is sent asynchronously without blocking navigation.
 - **AC-FE-010**: Given a backend error response, when the response status is 429, then a snackbar displays a message advising the user to wait approximately 30 minutes before retrying, suggests trying a different network if the issue persists, and hints that bot-like browsing behavior may trigger rate limiting. The snackbar auto-dismisses after 10 seconds.
 - **AC-FE-011**: Given a previously visited article cached offline, when the user goes offline and navigates to that article, then the cached content is rendered.
-- **AC-FE-012**: Given a new service worker version is detected, when the user is on the site, then an update snackbar appears with a changelog link and refresh button, displayed for 20 seconds.
+- **AC-FE-012**: Given a new service worker version is detected, when the user is on the site, then an update snackbar appears with a randomly selected humorous message, a changelog link, and a refresh button, displayed for 20 seconds.
 - **AC-FE-013**: Given a user visiting `/changelog`, when the page loads, then a chronological list of frontend changes is displayed.
 - **AC-FE-014**: Given a user visiting `/privacy`, when the page loads, then the static privacy policy content is displayed with all required sections.
 - **AC-FE-015**: Given WCAG 2.1 Level AA requirements, when any page is audited, then all interactive elements are keyboard navigable and color contrast meets minimum requirements.
