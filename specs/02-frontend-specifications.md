@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 2.6
+version: 2.7
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -71,7 +71,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - THE SYSTEM SHALL display a search bar at the top of the page.
 - THE SYSTEM SHALL display filter controls for:
   - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
-  - Tags (multi-select)
+  - Tags (chip input — see FE-COMP-014)
   - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter with values `all` or `any`. Default: "Match Any")
   - Date range for "last updated" (date picker range, filters on `date_updated`)
 - WHEN no search query (`q`) is active, results SHALL be sorted by `date_updated` descending (most recently updated first). WHEN a search query is active, results SHALL be sorted by relevance (vector similarity — most relevant first). No sort controls are displayed to the user.
@@ -200,7 +200,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - THE SYSTEM SHALL display a search bar at the top.
 - THE SYSTEM SHALL display filter controls for:
   - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
-  - Tags (multi-select)
+  - Tags (chip input — see FE-COMP-014)
   - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter. Default: "Match Any")
   - Date range (filters on `date_updated`)
 - WHEN no search query (`q`) is active, results SHALL be sorted by `date_updated` descending (most recently updated first). WHEN a search query is active, results SHALL be sorted by relevance (vector similarity — most relevant first). No sort controls are displayed to the user.
@@ -618,6 +618,33 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 ---
 
+#### FE-COMP-014: Tag Chip Input
+
+**Description**: A free-form text input for entering tags that converts completed tags into removable chip/pill buttons. Used on FE-PAGE-002 (`/technical`), FE-PAGE-004 (`/blog`), and FE-PAGE-007 (`/others`).
+
+**Requirements**:
+
+- THE SYSTEM SHALL render a text input field where the user can type tag text.
+- THE SYSTEM SHALL normalize all tag input to **lowercase**. Any uppercase characters typed by the user SHALL be converted to lowercase immediately (as the user types).
+- WHEN the user types a **comma** (`,`) character, THE SYSTEM SHALL:
+  1. Trim leading and trailing whitespace from the text preceding the comma.
+  2. IF the trimmed text is non-empty and is not a duplicate of an already-added tag, convert it into a **chip** (a small rounded button/pill element displaying the tag text).
+  3. IF the trimmed text is empty or is a duplicate, discard it silently.
+  4. Clear the text input field for the next tag.
+- WHEN the user presses **Enter** while text is present in the input, THE SYSTEM SHALL treat it the same as typing a comma (convert the current text to a chip).
+- Each chip SHALL display:
+  - The tag text (lowercase).
+  - A visible close/remove icon (e.g., "×").
+- WHEN the user **clicks a chip** (anywhere on the chip, including the close icon), THE SYSTEM SHALL remove that tag from the active filter list.
+- WHEN the user presses **Backspace** on an empty input field and at least one chip exists, THE SYSTEM SHALL remove the last (rightmost) chip.
+- THE SYSTEM SHALL render all chips inline, to the left of the text input, wrapping to the next line if necessary.
+- THE SYSTEM SHALL serialize the active tags as a **comma-separated lowercase string** in the `tags` URL query parameter (e.g., `tags=go,docker,cloud-run`). This value is sent directly to the backend API.
+- WHEN the page loads with a `tags` query parameter in the URL, THE SYSTEM SHALL parse the comma-separated value, split by comma, trim each tag, convert to lowercase, deduplicate, and render each tag as a chip (deep linking support).
+- THE SYSTEM SHALL record a `filter_change` breadcrumb entry (FE-COMP-013) whenever a tag is added or removed, with the filter name `tags` and the new comma-separated value.
+- THE SYSTEM SHALL be fully keyboard accessible: the input is focusable via Tab, chips can be removed via keyboard (Backspace removes last chip, or focus on individual chips and press Delete/Backspace), and the component has an appropriate `aria-label` (e.g., "Filter by tags").
+
+---
+
 #### FE-COMP-008: Offline Reading
 
 **Requirements**:
@@ -805,3 +832,6 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-022**: Given all 5 retry attempts fail due to a backend error response (not 503), when the final retry is exhausted, then a modal is displayed containing the formatted error log, a "Copy to clipboard" button, a link to `/socials`, and a privacy note linking to `/privacy`.
 - **AC-FE-023**: Given all 5 retry attempts fail due to persistent network unavailability or 503 responses, when the final retry is exhausted, then no modal is displayed (silent failure).
 - **AC-FE-024**: Given the error report modal is displayed, when the user clicks "Copy to clipboard", then the error log text (excluding JWT token and visitor_session_id) is copied to the clipboard with a "Copied!" confirmation.
+- **AC-FE-025**: Given the tag chip input on `/technical`, `/blog`, or `/others`, when the user types "Docker," (with trailing comma), then a lowercase chip "docker" appears and the text input is cleared.
+- **AC-FE-026**: Given one or more tag chips are displayed, when the user clicks a chip, then that tag is removed from the filter and the article list is updated.
+- **AC-FE-027**: Given the URL contains `tags=go,docker`, when the page loads, then two chips ("go" and "docker") are rendered in the tag input and the article list is filtered accordingly.

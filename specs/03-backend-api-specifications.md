@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 2.9
+version: 3.0
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -269,7 +269,7 @@ type Breadcrumb struct {
 | `page`       | integer | No       | Page number (default: 1)                       |
 | `q`          | string  | No       | Search query (max 300 characters)              |
 | `category`   | string  | No       | Filter by category                             |
-| `tags`       | string  | No       | Comma-separated list of tags to filter by      |
+| `tags`       | string  | No       | Comma-separated list of tags to filter by. The backend SHALL normalize each tag value to lowercase before querying. |
 | `tag_match`  | string  | No       | Tag matching logic when multiple tags are specified: `all` (AND — article must have ALL specified tags) or `any` (OR — article must have at least ONE specified tag). Default: `any`. |
 | `date_from`  | string  | No       | Start of date range for `date_updated` (ISO 8601 date, e.g. `2025-01-01`) |
 | `date_to`    | string  | No       | End of date range for `date_updated` (ISO 8601 date)              |

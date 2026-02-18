@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 2.6
+version: 2.7
 date_created: 2026-02-17
 last_updated: 2026-02-18
 owner: TJ Monserrat
@@ -51,7 +51,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `slug`         | string     | Yes      | URL-safe slug (format: `{title-slug}-{YYYY}-{MM}-{DD}-{HHMM}`) |
 | `category`     | string     | Yes      | Article category (free-form)                   |
 | `abstract`     | string     | Yes      | Brief summary / excerpt                        |
-| `tags`         | string[]   | Yes      | List of tags                                   |
+| `tags`         | string[]   | Yes      | List of tags (all values MUST be lowercase)    |
 | `content`      | string     | Yes      | Full article body in markdown                  |
 | `changelog`    | object[]   | Yes      | Array of changelog entries                     |
 | `changelog[].date`        | datetime | Yes | Date of the change                    |
@@ -138,7 +138,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `slug`         | string     | Yes      | URL-safe identifier                            |
 | `category`     | string     | Yes      | Content category                               |
 | `abstract`     | string     | Yes      | Brief description                              |
-| `tags`         | string[]   | Yes      | List of tags                                   |
+| `tags`         | string[]   | Yes      | List of tags (all values MUST be lowercase)    |
 | `external_url` | string     | Yes      | URL to the external content                    |
 | `date_created` | datetime   | Yes      | Date of original content (UTC)                 |
 | `date_updated` | datetime   | Yes      | Last metadata update (UTC)                     |
