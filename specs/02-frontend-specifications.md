@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 3.0
+version: 3.1
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
@@ -26,6 +26,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 | Infinite Scroll  | A pattern where content loads automatically as the user scrolls down, without explicit pagination controls |
 | Smart Download   | Heuristic-based prefetching of article content for offline reading based on user browsing patterns |
 | sessionStorage   | Browser storage that persists for the duration of a page session |
+| localStorage     | Browser storage that persists across tab closes and browser restarts, shared across all tabs on the same origin |
 | URL State Synchronization | The practice of reflecting UI state (search queries, filters, pagination) in the browser URL query parameters, enabling deep linking and shareability |
 | Hash Fragment    | The portion of a URL after the `#` symbol (e.g., `#section-title`), used to identify and link to a specific section within a page |
 | Deep Link        | A URL that encodes enough state to restore a specific view, including active search terms, applied filters, and current page |
@@ -48,7 +49,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 **Requirements**:
 
 - WHEN the user visits the root URL, THE SYSTEM SHALL display the front page content loaded from the backend API (`GET /`).
-- THE SYSTEM SHALL render the markdown content returned by the API.
+- THE SYSTEM SHALL render the raw markdown content returned by the API (`Content-Type: text/markdown`), consistent with how article content is delivered by BE-API-003 and BE-API-005. (CLR-201)
 - THE SYSTEM SHALL display navigation links to:
   - Technical Blog (`/technical`)
   - Opinions (`/blog`)
@@ -72,7 +73,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - Offline availability indicator (shows whether the article has been saved for offline reading)
 - THE SYSTEM SHALL display a search bar at the top of the page.
 - THE SYSTEM SHALL display filter controls for:
-  - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
+  - Category (single-select dropdown, populated from `GET /categories` with 24-hour localStorage cache)
   - Tags (chip input — see FE-COMP-014)
   - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter with values `all` or `any`. Default: "Match Any")
   - Date range for "last updated" (date picker range, filters on `date_updated`)
@@ -143,8 +144,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - THE SYSTEM SHALL display a citation section with a format selector:
   - The user SHALL be able to select from multiple citation formats:
     - **APA**: `Monserrat, T.J. (2025). Article Title. tjmonsi.com. https://tjmonsi.com/technical/slug.md`
-    - **MLA**: `Monserrat, TJ. "Article Title." tjmonsi.com, 15 Jan. 2025, https://tjmonsi.com/technical/slug.md.`
-    - **Chicago**: `Monserrat, TJ. "Article Title." tjmonsi.com. January 15, 2025. https://tjmonsi.com/technical/slug.md.`
+    - **MLA**: `Monserrat, T.J. "Article Title." tjmonsi.com, 15 Jan. 2025, https://tjmonsi.com/technical/slug.md.` (CLR-202)
+    - **Chicago**: `Monserrat, T.J. "Article Title." tjmonsi.com. January 15, 2025. https://tjmonsi.com/technical/slug.md.` (CLR-202)
     - **BibTeX**: BibTeX entry for academic use
     - **IEEE**: `[N] T.J. Monserrat, "Article Title," tjmonsi.com, Jan. 15, 2025. [Online]. Available: https://tjmonsi.com/technical/slug.md`
   - WHEN the user clicks the citation text, THE SYSTEM SHALL copy the selected citation format to the clipboard.
@@ -200,9 +201,10 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - Title (clickable, links to the external URL)
   - Date
   - Abstract
+  - Category (small label/badge) (CLR-203)
 - THE SYSTEM SHALL display a search bar at the top.
 - THE SYSTEM SHALL display filter controls for:
-  - Category (single-select dropdown, populated from `GET /categories` with 24-hour sessionStorage cache)
+  - Category (single-select dropdown, populated from `GET /categories` with 24-hour localStorage cache)
   - Tags (chip input — see FE-COMP-014)
   - Tag match mode (toggle or dropdown: "Match All" or "Match Any", corresponding to the `tag_match` API parameter. Default: "Match Any")
   - Date range (filters on `date_updated`)
@@ -355,6 +357,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 | 503         | "The service is temporarily unavailable. Please try again later."                                |
 | 504         | "TJ has been notified about the server taking too long." + randomized funny message (see below)  |
 | Other       | "Something went wrong. TJ has been notified of this issue."                                      |
+
+> **Note on 429 message**: The "30 minutes" delay in the user-facing message is intentionally longer than the actual `retry_after` period (30 seconds). This discourages users from rapidly retrying and accumulating offenses that could trigger progressive banning (5 offenses within 7 days → 30-day ban). (CLR-200)
 
 - **429 handling note**: The frontend SHALL match 429 responses by HTTP status code only. It SHALL NOT attempt to parse or depend on the response body for 429 responses, because Cloud Armor generates these responses at the load balancer level and the body format may not be JSON (see CLR-042, INFRA-005 custom error response configuration).
 - Informational toasts (e.g., "Content saved for offline") SHALL auto-dismiss after **5 seconds**. Error toasts SHALL persist until the user manually dismisses them. (CLR-166)
@@ -618,9 +622,9 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 **Requirements**:
 
-- WHEN the frontend navigates to `/technical`, `/blog`, or `/others`, THE SYSTEM SHALL check sessionStorage for a cached categories list.
+- WHEN the frontend navigates to `/technical`, `/blog`, or `/others`, THE SYSTEM SHALL check `localStorage` for a cached categories list. (CLR-199)
 - IF cached categories exist and are less than 24 hours old, THE SYSTEM SHALL use the cached list.
-- IF cached categories do not exist or are older than 24 hours, THE SYSTEM SHALL fetch categories from `GET /categories` and store the result in sessionStorage with a timestamp.
+- IF cached categories do not exist or are older than 24 hours, THE SYSTEM SHALL fetch categories from `GET /categories` and store the result in `localStorage` with a timestamp. (CLR-199)
 - THE SYSTEM SHALL use the categories list to populate the category filter dropdown.
 
 ---

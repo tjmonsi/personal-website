@@ -1,6 +1,6 @@
 ---
 title: System Overview
-version: 3.2
+version: 3.4
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
@@ -18,7 +18,7 @@ A personal website for TJ Monserrat serving as a professional online presence wi
 | Layer          | Technology                             | Hosting                                  |
 | -------------- | -------------------------------------- | ---------------------------------------- |
 | Frontend       | Nuxt 4 / Vue 3 / Vite (SPA mode)      | Firebase Hosting + Firebase Functions    |
-| Backend API    | Go                                     | Google Cloud Run (asia-southeast1)       |
+| Backend API    | Go (Fiber framework)                   | Google Cloud Run (asia-southeast1)       |
 | Sitemap Gen    | Node.js 22 LTS (Cloud Functions Gen 2) | Google Cloud Functions (asia-southeast1) |
 | Log Processing | Node.js 22 LTS (Cloud Functions Gen 2) | Google Cloud Functions (asia-southeast1) |
 | Offender Cleanup | Node.js 22 LTS (Cloud Functions Gen 2) | Google Cloud Functions (asia-southeast1) |
@@ -196,7 +196,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 | ID     | Decision                                      | Rationale                                                                 |
 | ------ | --------------------------------------------- | ------------------------------------------------------------------------- |
 | AD-001 | Nuxt 4 in SPA mode (no SSR)                   | Simpler deployment; Firebase Functions serves the SPA shell while Firebase Hosting serves static JS/CSS assets. See: https://nuxt.com/deploy/firebase |
-| AD-002 | Go for backend API                             | Performance, low memory footprint on Cloud Run, strong typing             |
+| AD-002 | Go with Fiber framework for backend API        | Performance, low memory footprint on Cloud Run, strong typing. Fiber provides Express-like ergonomics built on Fasthttp for high throughput. |
 | AD-003 | Cloud Run behind Load Balancer + Cloud Armor   | Managed scaling, DDoS protection, WAF rules                              |
 | AD-004 | GET-only API with single POST exception        | Read-only public surface reduces attack vectors. `POST /t` is the sole exception for visitor tracking and error reporting. |
 | AD-005 | Fixed page size of 10 items                    | Simplifies API, predictable performance, no user-controlled query abuse   |
@@ -204,7 +204,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 | AD-007 | API served on subdomain (`api.tjmonsi.com`) | Clean separation of frontend and backend, independent scaling and caching policies |
 | AD-008 | Content managed via separate Git repository    | Articles and content are maintained in a dedicated repo; a CI/CD pipeline pushes content to the database on merge. Keeps the public API read-only. |
 | AD-009 | Frontend SPA with offline reading support      | Not installable as PWA, but supports offline reading via smart prefetching and manual article saving in the browser |
-| AD-010 | Free-form categories derived from articles     | Categories are stored in a dedicated collection and synced from article metadata. Frontend caches categories in sessionStorage for 24 hours. |
+| AD-010 | Free-form categories derived from articles     | Categories are stored in a dedicated collection and synced from article metadata. Frontend caches categories in localStorage for 24 hours. (CLR-199) |
 | AD-011 | VPC with Private Google Access and Direct VPC Egress (Production only) | Production uses Direct VPC Egress for secure database connectivity — Cloud Run and Cloud Functions route traffic through the VPC, restricting egress to Google Cloud APIs only. Direct VPC Egress requires no separate connector instances, reducing cost versus Serverless VPC Access Connectors. No NAT router needed — minimizes cost and attack surface. (Development is local-only and has no GCP networking; see Environments.) Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc (CLR-181) |
 | AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Node.js), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
@@ -224,7 +224,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 - **Region (Firestore)**: `asia-southeast1`
 - **Region (Cloud Run)**: `asia-southeast1`
 - **Domain**: `tjmonsi.com` (frontend), `api.tjmonsi.com` (backend API)
-- **VPC** (Production only): `personal-website-vpc` in `asia-southeast1` with a `/28` subnet for Cloud Run and Cloud Functions Direct VPC Egress. Private Google Access enabled; no NAT router, no Serverless VPC Access Connector. Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc. The Development environment does NOT use a VPC to reduce cost.
+- **VPC** (Production only): `personal-website-vpc` in `asia-southeast1` with a `/27` subnet for Cloud Run and Cloud Functions Direct VPC Egress. Private Google Access enabled; no NAT router, no Serverless VPC Access Connector. Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc. The Development environment does NOT use a VPC to reduce cost. (CLR-198)
 - **Cloud Run**: Min instances = 0 (scale to zero), Max instances = 5
 - **Cloud Functions**: Sitemap generation function (Gen 2, Node.js) running internally in `asia-southeast1`
 - **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink via Pub/Sub (`rate-limit-events` topic, see INFRA-008c) in `asia-southeast1`

@@ -1,17 +1,17 @@
 ---
 title: Backend API Specifications
-version: 3.2
+version: 3.4
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
-tags: [backend, api, go, cloud-run, breadcrumbs]
+tags: [backend, api, go, fiber, cloud-run, breadcrumbs]
 ---
 
 ## Backend API Specifications
 
 ### Technology
 
-- **Language**: Go
+- **Language**: Go (Fiber framework)
 - **Runtime**: Google Cloud Run (asia-southeast1)
 - **Network**: Behind Google Cloud Load Balancer + Cloud Armor
 - **Database**: Firestore Enterprise (MongoDB compatibility mode) via MongoDB Go driver
@@ -63,8 +63,8 @@ tags: [backend, api, go, cloud-run, breadcrumbs]
 
 **Requirements**:
 
-- THE SYSTEM SHALL create a new breadcrumb collector at the start of every incoming HTTP request, scoped to that request's `context.Context`.
-- THE SYSTEM SHALL propagate the collector through Go's `context.Context` so that any function in the request call chain can record breadcrumbs without passing an additional parameter.
+- THE SYSTEM SHALL create a new breadcrumb collector at the start of every incoming HTTP request, scoped to the Fiber request's user context via `c.SetUserContext()`. (CLR-193)
+- THE SYSTEM SHALL propagate the collector through Fiber's user context (`c.UserContext()`) so that any function in the request call chain can record breadcrumbs without passing an additional parameter. (CLR-193)
 - THE SYSTEM SHALL limit the breadcrumb buffer to a maximum of **50 entries** per request. If more than 50 entries are recorded, THE SYSTEM SHALL discard the oldest entry (FIFO eviction).
 - THE SYSTEM SHALL record breadcrumb entries at the following processing points:
 
@@ -203,9 +203,9 @@ type Breadcrumb struct {
 
 **BE-BREADCRUMB Component Acceptance Criteria**:
 
-- **AC-BREADCRUMB-001**: Given an incoming HTTP request, when the middleware initializes, then a new breadcrumb collector is created and attached to the request's `context.Context` with a pre-allocated slice of capacity 50.
+- **AC-BREADCRUMB-001**: Given an incoming HTTP request, when the Fiber middleware initializes, then a new breadcrumb collector is created and attached to the request's user context (`c.SetUserContext()` / `c.UserContext()`) with a pre-allocated slice of capacity 50.
 - **AC-BREADCRUMB-002**: Given a breadcrumb collector with 50 entries, when a new breadcrumb is recorded, then the oldest entry is evicted (FIFO) and the new entry is appended.
-- **AC-BREADCRUMB-003**: Given any function in the request call chain, when it calls the breadcrumb recording API, then it can retrieve the collector from `context.Context` without an additional parameter.
+- **AC-BREADCRUMB-003**: Given any function in the request call chain, when it calls the breadcrumb recording API, then it can retrieve the collector from the user context (`c.UserContext()`) without an additional parameter.
 - **AC-BREADCRUMB-004**: Given a request that completes successfully (no error), when the response is sent, then the breadcrumb buffer is discarded and no breadcrumb data is logged.
 - **AC-BREADCRUMB-005**: Given a request that results in an internal error, when the error log entry is emitted, then it includes a `server_breadcrumbs` array with all breadcrumb entries recorded during processing.
 - **AC-BREADCRUMB-006**: Given a database query breadcrumb, when the entry is recorded, then filter field **names** (keys) are present but filter **values** are NOT (privacy constraint).
@@ -412,9 +412,9 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
         description: Initial publication
     citations:
       apa: "Monserrat, T.J. (2025). Article Title. tjmonsi.com. https://tjmonsi.com/technical/article-title-2025-01-15-1030.md"
-      mla: "Monserrat, TJ. \"Article Title.\" tjmonsi.com, 15 Jan. 2025, https://tjmonsi.com/technical/article-title-2025-01-15-1030.md."
-      chicago: "Monserrat, TJ. \"Article Title.\" tjmonsi.com. January 15, 2025. https://tjmonsi.com/technical/article-title-2025-01-15-1030.md."
-      bibtex: "@online{monserrat2025articletitle, author={Monserrat, TJ}, title={Article Title}, year={2025}, url={https://tjmonsi.com/technical/article-title-2025-01-15-1030.md}}"
+      mla: "Monserrat, T.J. \"Article Title.\" tjmonsi.com, 15 Jan. 2025, https://tjmonsi.com/technical/article-title-2025-01-15-1030.md."
+      chicago: "Monserrat, T.J. \"Article Title.\" tjmonsi.com. January 15, 2025. https://tjmonsi.com/technical/article-title-2025-01-15-1030.md."
+      bibtex: "@online{monserrat2025articletitle, author={Monserrat, T.J.}, title={Article Title}, year={2025}, url={https://tjmonsi.com/technical/article-title-2025-01-15-1030.md}}"
       ieee: "T.J. Monserrat, \"Article Title,\" tjmonsi.com, Jan. 15, 2025. [Online]. Available: https://tjmonsi.com/technical/article-title-2025-01-15-1030.md"
     ---
 
@@ -568,7 +568,7 @@ All path parameters, validation rules, response format (including `text/markdown
 - Categories are free-form and derived from the categories assigned to articles across all article types.
 - THE SYSTEM SHALL set `Cache-Control: public, max-age=3600` on all successful responses. (CLR-164)
 - IF no categories exist, THE SYSTEM SHALL return an empty array.
-- The frontend SHALL cache the response in sessionStorage for 24 hours.
+- The frontend SHALL cache the response in localStorage for 24 hours. (CLR-199)
 - Note: This endpoint returns only the list of category names and creation dates. It does not return full post data. (CLR-168, CLR-188)
 
 ---

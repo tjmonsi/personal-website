@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 2.9
+version: 3.0
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
@@ -185,7 +185,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 **Notes**:
 - Categories are populated by the content management CI/CD pipeline when articles are created or updated.
 - The `GET /categories` API endpoint returns all entries from this collection.
-- The frontend caches the categories list in sessionStorage for 24 hours.
+- The frontend caches the categories list in localStorage for 24 hours. (CLR-199)
 
 ---
 

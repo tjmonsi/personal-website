@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 3.7
+version: 3.8
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
@@ -99,7 +99,9 @@ tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-stu
 
 ```dockerfile
 # Multi-stage build
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
+# NOTE: Use the latest stable Go version at build time. Update this
+# base image when new Go stable releases become available. (CLR-195)
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -390,12 +392,12 @@ ENTRYPOINT ["/server"]
 1. Receive Cloud Armor log entry from Pub/Sub.
 2. Extract the client IP address from the log entry.
 3. Look up or create the offender record in the `rate_limit_offenders` collection (DM-009) by client IP.
-4. Use MongoDB atomic `$inc` operator to increment `offense_count` and atomically append to `offense_history` (via `$push`). This eliminates read-modify-write race conditions when multiple Cloud Function instances process concurrent Pub/Sub events for the same IP. (CLR-163)
-5. Evaluate progressive banning thresholds (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)):
+4. Use MongoDB `findOneAndUpdate` with `returnDocument: "after"` to atomically increment `offense_count` (via `$inc`) and append to `offense_history` (via `$push`), returning the updated document. This ensures the ban evaluation in step 5 uses the post-increment document state, eliminating race conditions when multiple Cloud Function instances process concurrent Pub/Sub events for the same IP. (CLR-163, CLR-197)
+5. Using the returned post-increment document, evaluate progressive banning thresholds (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)):
    - 5 offenses within 7 days → set 30-day ban.
    - 2 offenses within 7 days after 30-day ban expires → set 90-day ban.
    - 2 offenses within 7 days after 90-day ban expires → set indefinite ban.
-6. Write updated record to Firestore.
+6. IF a ban threshold is met in step 5, update the offender record with the new `current_ban` and `ban_history` fields. IF no ban threshold is met, no additional write is needed (step 4 already persisted the offense increment). (CLR-197)
 
 **Notes**:
 - The Cloud Function runs internally only and is NOT accessible from the public internet.
@@ -464,7 +466,7 @@ ENTRYPOINT ["/server"]
 | ------------------------ | -------------------------------------------------- |
 | VPC name                 | `personal-website-vpc`                             |
 | Region                   | `asia-southeast1`                                  |
-| Subnet (Direct VPC Egress) | `/28` subnet in `asia-southeast1` for Cloud Run and Cloud Functions Direct VPC Egress. Each Cloud Run instance or Cloud Function instance uses one IP address from this subnet. See: [IP address allocation](https://cloud.google.com/run/docs/configuring/shared-vpc-direct-vpc#direct-vpc-ip-allocation) |
+| Subnet (Direct VPC Egress) | `/27` subnet in `asia-southeast1` for Cloud Run and Cloud Functions Direct VPC Egress. Each Cloud Run instance or Cloud Function instance uses one IP address from this subnet. See: [IP address allocation](https://cloud.google.com/run/docs/configuring/shared-vpc-direct-vpc#direct-vpc-ip-allocation) (CLR-198) |
 | Private Google Access    | Enabled (allows access to Google Cloud APIs without public IPs) |
 | NAT                      | None (no Cloud NAT router)                         |
 | Firewall rules           | Default deny egress to internet; allow egress to Google Cloud API ranges only |
@@ -474,7 +476,7 @@ ENTRYPOINT ["/server"]
 - Cloud Run and Cloud Functions Gen 2 SHALL use **Direct VPC Egress** instead of Serverless VPC Access Connectors. Direct VPC Egress provides VPC connectivity without provisioning a separate connector, at no additional cost. Reference: [Direct VPC Egress](https://cloud.google.com/run/docs/configuring/vpc-direct-vpc)
 - **Cloud Run**: The Go backend API (INFRA-003) routes all egress traffic through the VPC via Direct VPC Egress. Enables private access to Firestore Enterprise and other Google Cloud services.
 - **Cloud Functions**: The sitemap generation (INFRA-008a), log processing (INFRA-008c), offender cleanup (INFRA-008d), and embedding sync (INFRA-014) Cloud Functions route all egress traffic through the VPC via Direct VPC Egress.
-- **IP Address Allocation**: Each Cloud Run revision or Cloud Function instance consumes one IP address from the configured subnet during execution. A `/28` subnet provides 16 IP addresses, sufficient for the expected maximum concurrency (Cloud Run max 5 instances + up to 4 Cloud Function instances). Monitor subnet utilization and expand if needed.
+- **IP Address Allocation**: Each Cloud Run revision or Cloud Function instance consumes one IP address from the configured subnet during execution. A `/27` subnet provides 32 IP addresses, providing sufficient headroom for the expected maximum concurrency (Cloud Run max 5 instances + up to 4 Cloud Function instances) with room for future scaling. GCP reserves some addresses per subnet, so usable IPs are fewer than the total. Monitor subnet utilization and expand if needed. (CLR-198)
 - Reference: [Shared VPC Direct VPC IP Allocation](https://cloud.google.com/run/docs/configuring/shared-vpc-direct-vpc#direct-vpc-ip-allocation)
 
 **Network Policy**:

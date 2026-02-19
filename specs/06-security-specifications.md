@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 3.5
+version: 3.6
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
@@ -78,7 +78,8 @@ tags: [security, rate-limiting, cors, authentication, vector-search, terraform, 
 
 - **Real-time rate counting**: Enforced by **Google Cloud Armor** at the load balancer level (see INFRA-005 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). Cloud Armor handles per-IP request counting and throttling. This avoids the need for in-memory rate counters in the Go application, which would be lost when Cloud Run instances scale down or restart.
 - **Offense tracking via log sink**: A **Cloud Logging log sink** routes Cloud Armor rate-limit (429) events to a **Cloud Function** (`process-rate-limit-logs`, INFRA-008c). The Cloud Function writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor (which blocks requests before they reach Cloud Run) and the application's progressive banning logic.
-- **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The Go application checks Firestore for ban status on each `GET` and `POST` request and enforces progressive banning tiers. `OPTIONS` preflight requests are exempt from ban checks (consistent with rate-limiting exemption) to avoid CORS preflight failures for banned clients.
+- **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The Go application checks ban status on each `GET` and `POST` request and enforces progressive banning tiers. `OPTIONS` preflight requests are exempt from ban checks (consistent with rate-limiting exemption) to avoid CORS preflight failures for banned clients.
+- **Ban status caching**: The Go application SHALL maintain a short-lived **in-memory LRU cache** for ban status lookups to reduce Firestore reads. Cache parameters: **60-second TTL**, **maximum 1000 entries**, keyed by client IP. On cache miss, the application reads from Firestore and populates the cache. A newly applied ban may take up to 60 seconds to take effect for already-cached "not banned" IPs. This trade-off is acceptable given the progressive banning model where bans are applied after multiple offenses. (CLR-196)
 - **Adaptive protection**: **Cloud Armor Adaptive Protection** is enabled to provide ML-based DDoS detection with recommended rules that the owner can review and apply, complementing the application-level progressive banning (see INFRA-005).
 - This multi-layer approach ensures rate limiting works correctly across Cloud Run auto-scaling events while keeping the infrastructure simple (no Redis/Memorystore needed).
 
@@ -145,6 +146,8 @@ WHEN a client exceeds the rate limit, THE SYSTEM SHALL track it as an "offense."
   "retry_after": 30
 }
 ```
+
+> **Note**: The `retry_after` value is 30 seconds, but the user-facing message in FE-COMP-003 says "30 minutes." This is intentional — the inflated message discourages aggressive retrying that could accumulate offenses leading to progressive bans. (CLR-200)
 
 **Ban response for 403** (30-day block):
 

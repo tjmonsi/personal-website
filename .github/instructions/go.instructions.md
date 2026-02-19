@@ -203,16 +203,17 @@ Follow idiomatic Go practices and community standards when writing Go code. Thes
 
 ## API Design
 
-### HTTP Handlers
+### HTTP Handlers (Fiber)
 
-- Use `http.HandlerFunc` for simple handlers
-- Implement `http.Handler` for handlers that need state
-- Use middleware for cross-cutting concerns
-- Set appropriate status codes and headers
-- Handle errors gracefully and return appropriate error responses
-- Router usage by Go version:
-	- If `go >= 1.22`, prefer the enhanced `net/http` `ServeMux` with pattern-based routing and method matching
-	- If `go < 1.22`, use the classic `ServeMux` and handle methods/paths manually (or use a third-party router when justified)
+- Use [Go Fiber v2](https://gofiber.io/) for routing, middleware, and request handling
+- Handlers have the signature `func(c *fiber.Ctx) error`
+- Use `c.Params("key")` for path parameters, `c.Query("key")` for query parameters
+- Use `c.UserContext()` to pass `context.Context` to service/repository layers
+- Use `c.JSON()` for JSON responses, `c.Status()` for status codes
+- Use `c.SendString()` or `c.Send()` for non-JSON responses
+- Group related routes with `app.Group()`
+- Use Fiber's built-in middleware (CORS, Recover, RequestID) for cross-cutting concerns
+- Return errors from handlers — use a custom error handler for consistent error responses
 
 ### JSON APIs
 

@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 3.4
+version: 3.5
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
@@ -158,7 +158,7 @@ The following examples illustrate the three distinct log entry types. Each examp
 > - `"frontend_error"` — for `POST /t` requests with `action: "error_report"`.
 > - Omitted for all other requests (standard backend request logs).
 
-> **Note on `server_breadcrumbs`**: The `server_breadcrumbs` field is included ONLY in ERROR-severity log entries. It contains an array of timestamped processing steps recorded via Go `context.Context` during request handling (see BE-BREADCRUMB in [03-backend-api-specifications.md](03-backend-api-specifications.md)). On successful requests, breadcrumb data is discarded and not logged. Each entry contains `timestamp`, `step`, `message`, and optional `data` fields.
+> **Note on `server_breadcrumbs`**: The `server_breadcrumbs` field is included ONLY in ERROR-severity log entries. It contains an array of timestamped processing steps recorded via Fiber's user context (`c.SetUserContext()` / `c.UserContext()`) during request handling (see BE-BREADCRUMB in [03-backend-api-specifications.md](03-backend-api-specifications.md)). (CLR-194) On successful requests, breadcrumb data is discarded and not logged. Each entry contains `timestamp`, `step`, `message`, and optional `data` fields.
 ```
 
 **Log Levels**:
