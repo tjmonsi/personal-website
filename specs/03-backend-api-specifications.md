@@ -1,8 +1,8 @@
 ---
 title: Backend API Specifications
-version: 3.0
+version: 3.2
 date_created: 2026-02-17
-last_updated: 2026-02-18
+last_updated: 2026-02-19
 owner: TJ Monserrat
 tags: [backend, api, go, cloud-run, breadcrumbs]
 ---
@@ -32,7 +32,7 @@ tags: [backend, api, go, cloud-run, breadcrumbs]
 
 - THE SYSTEM SHALL only return the following HTTP status codes to clients:
   - `200` — Success
-  - `304` — Not Modified (conditional request response for article detail endpoints; see BE-API-003, BE-API-005)
+  - `304` — Not Modified (conditional request response for endpoints supporting ETag/Last-Modified; see BE-API-001, BE-API-003, BE-API-005)
   - `400` — Bad Request (invalid input)
   - `403` — Forbidden (blocked client, 30-day ban tier)
   - `404` — Not Found (resource does not exist, catch-all for masked errors, or indefinitely blocked client)
@@ -233,6 +233,22 @@ type Breadcrumb struct {
 | `POST /t`                   | `application/json`   | Tracking/error reporting                   |
 
 - Error responses (4xx, 5xx) SHALL always use `Content-Type: application/json` regardless of the endpoint's success content type.
+
+**Standard Error Response Body:**
+
+All application-generated error responses (4xx) SHALL use the following JSON structure:
+
+```json
+{
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error description"
+  }
+}
+```
+
+Standard error codes: `VALIDATION_ERROR`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `RATE_LIMITED`, `FORBIDDEN`. (CLR-180)
+
 - The `text/markdown` endpoints return content that resembles accessing a `.md` file directly, with metadata encoded as YAML front matter where applicable.
 
 ---
@@ -254,6 +270,8 @@ type Breadcrumb struct {
 
 - THE SYSTEM SHALL fetch the front page markdown content from the database.
 - THE SYSTEM SHALL return the raw markdown string as the response body with `Content-Type: text/markdown`.
+- THE SYSTEM SHALL set `Cache-Control: public, max-age=300` on all successful responses. (CLR-164)
+- THE SYSTEM SHALL include `ETag` (SHA-256 weak ETag: `W/"<sha256-hex>"`) and `Last-Modified` headers in responses. WHEN the client sends `If-None-Match` or `If-Modified-Since` headers that match the current state, THE SYSTEM SHALL return `304 Not Modified` with no body. (CLR-171)
 - IF the content is not found, THE SYSTEM SHALL return `404`.
 
 ---
@@ -271,8 +289,8 @@ type Breadcrumb struct {
 | `category`   | string  | No       | Filter by category                             |
 | `tags`       | string  | No       | Comma-separated list of tags to filter by. The backend SHALL normalize each tag value to lowercase before querying. |
 | `tag_match`  | string  | No       | Tag matching logic when multiple tags are specified: `all` (AND — article must have ALL specified tags) or `any` (OR — article must have at least ONE specified tag). Default: `any`. |
-| `date_from`  | string  | No       | Start of date range for `date_updated` (ISO 8601 date, e.g. `2025-01-01`) |
-| `date_to`    | string  | No       | End of date range for `date_updated` (ISO 8601 date)              |
+| `date_from`  | string  | No       | Start of date range for `date_updated` (ISO 8601 date, e.g. `2025-01-01`). Inclusive: `>= start of day UTC`. (CLR-155) |
+| `date_to`    | string  | No       | End of date range for `date_updated` (ISO 8601 date). Inclusive: `< start of next day UTC` (i.e., the entire day is included). (CLR-155) |
 
 **Validation**:
 
@@ -280,6 +298,8 @@ type Breadcrumb struct {
 - IF `page` is not a positive integer, THE SYSTEM SHALL return `400`.
 - IF `date_from` or `date_to` is not valid ISO 8601, THE SYSTEM SHALL return `400`.
 - IF `tag_match` is provided and is not `all` or `any`, THE SYSTEM SHALL return `400`.
+- IF the `tags` parameter contains more than **10** tags, THE SYSTEM SHALL return `400` with an appropriate error message (e.g., `"Maximum of 10 tags allowed"`). (CLR-160)
+- IF `q` is present but empty or whitespace-only, THE SYSTEM SHALL treat it as absent (no vector search; return standard date-sorted listing). (CLR-189)
 
 **Response** (`200`):
 
@@ -308,6 +328,7 @@ type Breadcrumb struct {
 **Behavior**:
 
 - THE SYSTEM SHALL return exactly 10 items per page (fixed, not configurable by the client).
+- THE SYSTEM SHALL set `Cache-Control: no-store` on all responses from this endpoint. (CLR-164)
 - WHEN the `q` parameter is NOT present, THE SYSTEM SHALL sort results by `date_updated` in descending order (most recently updated first).
 - WHEN the `q` parameter IS present, THE SYSTEM SHALL sort results by vector similarity (cosine distance ascending — most relevant first). The `date_updated` field SHALL NOT influence sort order when a search query is active.
 - These are the only sort orders; no `sort_by` or `sort_order` parameters are accepted.
@@ -343,7 +364,7 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 6. **Sort**: Sort results by cosine distance ascending (most similar first).
 7. **Paginate**: Apply frontend pagination (page number × page size of 10) to the filtered result set. Compute `total_items` and `total_pages` from the filtered set.
 
-> **Note**: When `q` is present without filters, the system maps the frontend page number directly to Firestore Native vector search pagination (offset/limit). When `q` is present with filters, the system fetches all candidate IDs within the distance threshold (up to a hard limit of 500), filters in Firestore Enterprise, and paginates the filtered results.
+> **Note**: WHEN `q` is present (with or without filters), THE SYSTEM SHALL always fetch up to 500 candidate document IDs from Firestore Native via `findNearest(limit: 500)`. The system then retrieves full documents from Firestore Enterprise by these IDs, applies any filters (category, tags, date range), and paginates the resulting set. `total_items` equals the number of candidates after filtering (capped at 500). This unified approach applies regardless of whether filters are present. (CLR-178)
 
 > **Reference — Distance Threshold**: The default cosine distance threshold of 0.35 (cosine similarity ≥ 0.65) balances recall and precision for semantic article search. This value should be validated empirically with real content and tuned if needed. See: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings and https://cloud.google.com/firestore/native/docs/vector-search
 
@@ -404,7 +425,8 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 | Header           | Value                                                    |
 | ---------------- | -------------------------------------------------------- |
 | `Content-Type`   | `text/markdown`                                          |
-| `ETag`           | Hash of the response body (e.g., MD5 or SHA-256)         |
+| `ETag`           | SHA-256 weak ETag of the response body, formatted as `W/"<sha256-hex>"` (CLR-162) |
+| `Cache-Control`  | `public, max-age=300` (CLR-164)                          |
 | `Last-Modified`  | `date_updated` formatted as HTTP date (e.g., `Wed, 20 Jun 2025 14:00:00 GMT`) |
 
 **Conditional Request Support**:
@@ -430,7 +452,7 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 
 **Behavior**: Identical to BE-API-002 but queries the blog/opinions table instead of the technical table.
 
-All query parameters, validation rules, response format, error handling, and **vector search flow** (when `q` is present) are the same as BE-API-002. The vector search queries the `blog_article_vectors` Firestore Native collection instead of `technical_article_vectors`.
+All query parameters, validation rules, response format, error handling, **vector search flow** (when `q` is present), and `Cache-Control: no-store` (CLR-164) are the same as BE-API-002. The vector search queries the `blog_article_vectors` Firestore Native collection instead of `technical_article_vectors`.
 
 ---
 
@@ -440,7 +462,7 @@ All query parameters, validation rules, response format, error handling, and **v
 
 **Behavior**: Identical to BE-API-003 but queries the blog/opinions table instead of the technical table.
 
-All path parameters, validation rules, response format (including `text/markdown` with YAML front matter), conditional request support (ETag, Last-Modified, 304 Not Modified), and error handling are the same as BE-API-003. Citation URLs use the `/blog/` path prefix (e.g., `https://tjmonsi.com/blog/slug.md`).
+All path parameters, validation rules, response format (including `text/markdown` with YAML front matter), response headers (`Cache-Control: public, max-age=300`, ETag, Last-Modified — CLR-164), conditional request support (ETag, Last-Modified, 304 Not Modified), and error handling are the same as BE-API-003. Citation URLs use the `/blog/` path prefix (e.g., `https://tjmonsi.com/blog/slug.md`).
 
 ---
 
@@ -477,6 +499,7 @@ All path parameters, validation rules, response format (including `text/markdown
 
 - THE SYSTEM SHALL return social links filtered to only include entries where `is_active` is `true` in the database.
 - THE SYSTEM SHALL return items sorted by `sort_order` in ascending order.
+- THE SYSTEM SHALL set `Cache-Control: public, max-age=3600` on all successful responses. (CLR-164)
 - IF no active social links exist, THE SYSTEM SHALL return an empty `items` array (HTTP 200).
 
 ---
@@ -485,7 +508,7 @@ All path parameters, validation rules, response format (including `text/markdown
 
 **Description**: Returns a paginated list of external/notable content.
 
-**Behavior**: Identical to BE-API-002 in terms of query parameters, pagination, validation, error handling, and **vector search flow** (when `q` is present), but queries the "others" collection. The vector search queries the `others_vectors` Firestore Native collection. Date range filter applies to `date_updated`.
+**Behavior**: Identical to BE-API-002 in terms of query parameters, pagination, validation, error handling, **vector search flow** (when `q` is present), and `Cache-Control: no-store` (CLR-164), but queries the "others" collection. The vector search queries the `others_vectors` Firestore Native collection. Date range filter applies to `date_updated`.
 
 **Response item differences**:
 
@@ -543,8 +566,10 @@ All path parameters, validation rules, response format (including `text/markdown
 
 - THE SYSTEM SHALL return all categories from the `categories` collection, sorted alphabetically by name.
 - Categories are free-form and derived from the categories assigned to articles across all article types.
+- THE SYSTEM SHALL set `Cache-Control: public, max-age=3600` on all successful responses. (CLR-164)
 - IF no categories exist, THE SYSTEM SHALL return an empty array.
 - The frontend SHALL cache the response in sessionStorage for 24 hours.
+- Note: This endpoint returns only the list of category names and creation dates. It does not return full post data. (CLR-168, CLR-188)
 
 ---
 
@@ -691,12 +716,13 @@ For error reporting:
 - THE SYSTEM SHALL extract the client IP from `X-Forwarded-For` or the connection source.
 - THE SYSTEM SHALL add a server-side UTC timestamp.
 - THE SYSTEM SHALL perform a GeoIP country lookup on the full (un-truncated) client IP address using a GeoIP database (e.g., MaxMind GeoLite2-Country). The resolved **country code** (ISO 3166-1 alpha-2, e.g., `PH`, `US`, `SG`) SHALL be included in the structured log entry as a `geo_country` field. IF the lookup fails or yields no result, `geo_country` SHALL be set to `"unknown"`. The full IP address is NOT stored; only the country code is retained. This lookup occurs before IP truncation (CLR-123).
-- THE SYSTEM SHALL compute a `visitor_id` by generating a SHA-256 hash of the concatenation of: `visitor_session_id` + truncated IP address + raw `User-Agent` header. The resulting hash SHALL be truncated to the first 32 hexadecimal characters. This `visitor_id` is included in every structured log entry emitted by this endpoint. It serves as a privacy-preserving, non-reversible session-scoped identifier used for unique visitor counting and bot traffic discrimination.
+- THE SYSTEM SHALL compute a `visitor_id` by generating a SHA-256 hash of the concatenation of: `visitor_session_id` + `":"` + truncated IP address + `":"` + raw `User-Agent` header (i.e., `SHA-256(visitor_session_id + ":" + truncated_ip + ":" + user_agent)`). The `:` delimiter prevents ambiguous concatenation collisions. The resulting hash SHALL be truncated to the first 32 hexadecimal characters. This `visitor_id` is included in every structured log entry emitted by this endpoint. It serves as a privacy-preserving, non-reversible session-scoped identifier used for unique visitor counting and bot traffic discrimination. (CLR-156)
 - IF `action` is `"page_view"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the tracking payload fields (page, referrer, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
 - IF `action` is `"link_click"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the click payload fields (page, clicked_url, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
 - IF `action` is `"time_on_page"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the engagement payload fields (page, milestone, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
 - IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs, truncated IP, geo_country, timestamp, visitor_id). The `breadcrumbs` array (if present) SHALL be included in the structured log entry as-is. This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
 - THE SYSTEM SHALL NOT write tracking or error report data to Firestore. Structured logging to stdout is the sole persistence mechanism; Cloud Logging routes these entries to BigQuery.
+- THE SYSTEM SHALL set `Cache-Control: no-store` on all responses from this endpoint. (CLR-164)
 - THE SYSTEM SHALL apply the standard rate limiting rules to this endpoint (see SEC-002).
 
 ---
@@ -717,8 +743,10 @@ For error reporting:
 
 **Behavior**:
 
-- THE SYSTEM SHALL check database connectivity and return `200` with `{"status": "ok"}` if healthy.
-- IF the database is unreachable, THE SYSTEM SHALL return `503 Service Unavailable`.
+- THE SYSTEM SHALL check connectivity to Firestore Enterprise (MongoDB-compatible) only, using a lightweight operation (e.g., `db.runCommand({ping: 1})`) with a **5-second timeout**. Firestore Native is excluded from the health check because it has no simple ping equivalent and its unavailability only degrades search functionality, not core content delivery. (CLR-161)
+- THE SYSTEM SHALL return `200` with `{"status": "ok"}` if the Firestore Enterprise ping succeeds within the timeout.
+- IF Firestore Enterprise is unreachable or the ping exceeds 5 seconds, THE SYSTEM SHALL return `503 Service Unavailable`.
+- THE SYSTEM SHALL set `Cache-Control: no-store` on all responses from this endpoint. (CLR-164)
 - This endpoint SHALL NOT be subject to application-level rate limiting.
 - This endpoint SHALL be accessible only through Cloud Run's internal health check mechanism (not exposed to public traffic via the Load Balancer).
 
@@ -813,7 +841,7 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 
 ### Acceptance Criteria
 
-- **AC-API-001**: Given a valid `GET /technical` request, when articles exist, then the response returns `200` with `application/json` containing a paginated list with `items`, `total_items`, `page`, `page_size`, `total_pages`.
+- **AC-API-001**: Given a valid `GET /technical` request, when articles exist, then the response returns `200` with `application/json` containing an `items` array and a `pagination` object with `current_page`, `total_pages`, `total_items`, and `page_size`.
 - **AC-API-002**: Given a valid `GET /technical/{slug}.md` request, when the article exists, then the response returns `200` with `text/markdown` including YAML front matter and the full article body.
 - **AC-API-003**: Given a `GET /technical/{slug}.md` request with `If-None-Match` matching the current `ETag`, when the article has not changed, then the response returns `304 Not Modified` with no body.
 - **AC-API-004**: Given a valid `POST /t` request with a valid `token` field in the body and `action: "page_view"`, when processed, then the response returns `200` with `{"status": "ok"}` and a structured log entry is emitted.
@@ -837,3 +865,5 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-022**: Given the breadcrumb trail records a database query, when the log is inspected, then filter field names (keys) are present but filter values are NOT present (privacy constraint).
 - **AC-API-GEO-001**: Given a `POST /t` request, when the backend processes the request, then it SHALL resolve `geo_country` from the client IP address prior to truncation using the embedded GeoIP database; only the country code is retained — the full IP is discarded immediately after lookup. The resolved `geo_country` is included in the structured log entry. (CLR-137, CLR-144)
 - **AC-API-GEO-002**: Given a `POST /t` request where the GeoIP lookup fails or returns no result, then the system SHALL set `geo_country` to `"unknown"` in the structured log entry. (CLR-137)
+- **AC-API-023**: Given any request that results in a 4xx application error, when the response is returned, then the body conforms to `{ "error": { "code": "<ERROR_CODE>", "message": "<description>" } }` as defined in the Standard Error Response Body schema. (CLR-180)
+- **AC-API-024**: Given a `GET /technical?q=` request (empty query string), when articles exist, then the response items are sorted by `date_updated` descending and vector search is NOT invoked. (CLR-189)

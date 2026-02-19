@@ -1,8 +1,8 @@
 ---
 title: Infrastructure Specifications
-version: 3.6
+version: 3.7
 date_created: 2026-02-17
-last_updated: 2026-02-18
+last_updated: 2026-02-19
 owner: TJ Monserrat
 tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac, artifact-registry, cloud-dns, pubsub]
 ---
@@ -127,6 +127,14 @@ EXPOSE 8080
 ENTRYPOINT ["/server"]
 ```
 
+**GeoIP Database Update** (CLR-151):
+
+- The MaxMind GeoLite2-Country database (`.mmdb`) is `COPY`'d into the Docker image at build time. GeoLite2 databases are updated weekly by MaxMind.
+- The Application CI/CD pipeline SHALL download the latest GeoLite2-Country database before the Docker build step, using a MaxMind license key stored in GitHub Actions secrets (secret name: `MAXMIND_LICENSE_KEY`).
+- Download URL: `https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz`
+- A **weekly scheduled GitHub Actions workflow** SHALL rebuild and redeploy the Docker image with the latest GeoLite2 database, even if no code changes have occurred. This ensures the GeoIP database is refreshed at least weekly.
+- The scheduled workflow SHALL run independently of the main application CI/CD pipeline and SHALL follow the same build-test-deploy stages.
+
 **Container Security**:
 
 - The container SHALL run as the non-root user `jack` (UID 10001). Root credentials and privileges are not present at runtime.
@@ -176,6 +184,8 @@ ENTRYPOINT ["/server"]
 | 5000          | Block path traversal attempts            | Deny      |
 | 9999          | Default allow                            | Allow     |
 
+> **Note**: Rule 500 is defense-in-depth. Cloud Run's ingress is set to `internal-and-cloud-load-balancing`, meaning direct access is already blocked. Cloud Armor provides an additional layer of filtering at the edge before traffic reaches Cloud Run. (CLR-174)
+
 **Rate Limiting at Cloud Armor level**:
 
 - **Primary rate limiting enforcement**: Cloud Armor handles per-IP rate limiting at the load balancer level. This eliminates the need for application-level in-memory rate counters, which would not persist across Cloud Run instance scaling events.
@@ -220,8 +230,9 @@ ENTRYPOINT ["/server"]
 | Mode             | MongoDB compatibility              |
 | Region           | `asia-southeast1`                  |
 | Driver           | MongoDB Go driver (standard wire protocol) |
-| Security         | Backend-only access (no direct client access) |
-| Network access   | Private endpoint or IP allowlist from Cloud Run |
+| Security         | IAM-based authentication via `roles/datastore.user` (no direct client access) |
+| Authentication   | IAM service account auth — Cloud Run service account authenticates via connection string using the MongoDB Go driver. See: https://docs.cloud.google.com/firestore/mongodb-compatibility/docs/connect#cloud-run |
+| Dev access       | Temporary access token for local development. See: https://docs.cloud.google.com/firestore/mongodb-compatibility/docs/connect#connect_with_a_temporary_access_token |
 | Backup           | Enabled (managed by Firestore Enterprise) |
 
 ---
@@ -312,9 +323,10 @@ ENTRYPOINT ["/server"]
 1. Query all published articles from `technical_articles` and `blog_articles` collections.
 2. Include static pages: `/`, `/technical`, `/blog`, `/socials`, `/others`, `/privacy`, `/changelog`. (CLR-106)
 3. Article URLs SHALL include the `.md` extension (e.g., `https://tjmonsi.com/technical/article-title-2025-01-15-1030.md`).
-4. Build sitemap XML per the [Sitemaps protocol](https://www.sitemaps.org/protocol.html).
-5. Write the generated XML to the `sitemap` Firestore collection (DM-010).
-6. The `GET /sitemap.xml` public endpoint reads from this collection (BE-API-011).
+4. THE SYSTEM SHALL exclude articles in the `others` category from the generated sitemap. Only articles in `blog` and `technical` categories SHALL be included in the sitemap. (CLR-175)
+5. Build sitemap XML per the [Sitemaps protocol](https://www.sitemaps.org/protocol.html).
+6. Write the generated XML to the `sitemap` Firestore collection (DM-010).
+7. The `GET /sitemap.xml` public endpoint reads from this collection (BE-API-011).
 
 ##### INFRA-008b: Cloud Scheduler — `trigger-sitemap-generation`
 
@@ -378,7 +390,7 @@ ENTRYPOINT ["/server"]
 1. Receive Cloud Armor log entry from Pub/Sub.
 2. Extract the client IP address from the log entry.
 3. Look up or create the offender record in the `rate_limit_offenders` collection (DM-009) by client IP.
-4. Increment `offense_count` and append to `offense_history`.
+4. Use MongoDB atomic `$inc` operator to increment `offense_count` and atomically append to `offense_history` (via `$push`). This eliminates read-modify-write race conditions when multiple Cloud Function instances process concurrent Pub/Sub events for the same IP. (CLR-163)
 5. Evaluate progressive banning thresholds (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)):
    - 5 offenses within 7 days → set 30-day ban.
    - 2 offenses within 7 days after 30-day ban expires → set 90-day ban.
@@ -578,9 +590,9 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 1. Read all articles from `technical_articles`, `blog_articles`, and `others` collections in Firestore Enterprise (via MongoDB driver or admin SDK).
 2. For each article, construct the embedding source text: `title + "\n" + abstract + "\n" + category + "\n" + tags (comma-separated)`.
 3. Compute SHA-256 hash of the source text.
-4. Compare the hash with the `embedding_text_hash` field in the corresponding Firestore Native document.
-   - **If unchanged**: Skip (no re-embedding needed).
-   - **If changed or new**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_DOCUMENT` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before writing to Firestore Native.
+4. Compare the hash with the `embedding_text_hash` field in the corresponding Firestore Native document. Also compare the document's `model_version` field against the currently configured embedding model version.
+   - **If hash unchanged AND model_version matches**: Skip (no re-embedding needed).
+   - **If hash changed, model_version mismatched, or new document**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_DOCUMENT` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before writing to Firestore Native. (CLR-152)
 5. Write/update the vector document in the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors`).
 6. Delete vector documents from Firestore Native that no longer have corresponding articles in Firestore Enterprise (orphan cleanup).
 
@@ -589,6 +601,7 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 - The hash-based change detection avoids unnecessary Gemini API calls, reducing cost.
 - The content CI/CD pipeline SHALL call this function after successfully pushing content to Firestore Enterprise.
 - Cloud Scheduler (INFRA-014b) triggers this function daily as a safety net to catch any missed syncs.
+- IF a partial failure occurs during sync (e.g., embedding generation succeeds but Firestore Native write fails), THE SYSTEM SHALL log the failure with document ID and step name, skip the failed document, and continue processing remaining documents. Failed documents SHALL be retried on the next scheduled sync run. The sync log SHALL include a summary of succeeded, failed, and skipped document counts. (CLR-172)
 
 **Integration Contract (Content CI/CD Pipeline)**:
 
@@ -726,14 +739,14 @@ Terraform manages GCP resources defined in the spec, including but not limited t
 
 > **Note**: Terraform enables the Firebase API (`firebase.googleapis.com`) and creates the Firebase Hosting site resource (`google_firebase_hosting_site`). Custom domain configuration, rewrite rules (`firebase.json`), security headers (SEC-005), and deployment are all handled by `firebase deploy` via the CI/CD pipeline. See INFRA-001 and INFRA-002 for details.
 
-**Firestore Enterprise (INFRA-006) — Investigate Terraform Support**:
+**Firestore Enterprise (INFRA-006) — Terraform Support**:
 
-Firestore Enterprise in MongoDB compatibility mode is a newer feature. Terraform provider support for this specific mode should be verified during implementation using the `google_firestore_database` resource.
+Firestore Enterprise in MongoDB compatibility mode is a newer feature. The Terraform `google_firestore_database` resource support for this specific mode SHALL be verified during implementation.
 
 - **If supported**: Terraform manages the database creation, mode selection (MongoDB compat), and region (`asia-southeast1`). Add to the Terraform scope.
-- **If not supported**: Add Firestore Enterprise to the bootstrap resources table below (manual provisioning via Console or `gcloud`).
+- **If not supported**: Firestore Enterprise SHALL be provisioned manually (via Console or `gcloud`) and documented as a bootstrap prerequisite in the bootstrap resources table below. (CLR-150)
 
-> **Note**: Verification of Terraform provider support for Firestore Enterprise MongoDB compatibility mode is a prerequisite task during the implementation phase.
+> **Note**: INFRA-016 Terraform scope excludes Firestore Enterprise provisioning if the Google Terraform provider does not support MongoDB compat mode. In that case, Firestore Enterprise SHALL be provisioned manually and documented as a bootstrap prerequisite.
 
 **Deployment Boundary — Terraform Provisions, CI/CD Deploys**:
 

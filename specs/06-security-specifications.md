@@ -1,8 +1,8 @@
 ---
 title: Security Specifications
-version: 3.3
+version: 3.5
 date_created: 2026-02-17
-last_updated: 2026-02-18
+last_updated: 2026-02-19
 owner: TJ Monserrat
 tags: [security, rate-limiting, cors, authentication, vector-search, terraform, iac, wif, service-accounts]
 ---
@@ -50,6 +50,7 @@ tags: [security, rate-limiting, cors, authentication, vector-search, terraform, 
 - THE SYSTEM SHALL validate `date_from` and `date_to` as valid ISO 8601 dates.
 - THE SYSTEM SHALL validate `category` as a non-empty string.
 - THE SYSTEM SHALL validate `tags` as a comma-separated list of alphanumeric strings with hyphens.
+- Tags array: maximum **10** items per request. THE SYSTEM SHALL reject requests with more than 10 tags with HTTP `400`. (CLR-160)
 - THE SYSTEM SHALL reject requests with unknown or malformed query parameters with HTTP `400`.
 
 > **Note**: This strict query parameter validation is intentional. The backend API (`api.tjmonsi.com`) is not the URL shared on social media — the frontend URL (`tjmonsi.com`) is. UTM parameters and other tracking query strings on the frontend URL are handled client-side and forwarded to the backend via `POST /t` as tracking data. The backend API expects a strict one-to-one mapping of query parameters for search and pagination purposes only.
@@ -262,7 +263,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | Header                         | Value                                                     |
 | ------------------------------ | --------------------------------------------------------- |
-| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'; object-src 'none'` |
+| `Content-Security-Policy`      | `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'; worker-src 'self'; object-src 'none'` |
 | `X-Content-Type-Options`       | `nosniff`                                                 |
 | `X-Frame-Options`              | `DENY`                                                    |
 | `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains`                     |
@@ -287,7 +288,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
           { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
           { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
           { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" },
-          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'; object-src 'none'" }
+          { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.tjmonsi.com; img-src 'self' data: https://api.tjmonsi.com; font-src 'self'; worker-src 'self'; object-src 'none'" }
         ]
       }
     ]
@@ -470,9 +471,19 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | Role                                | Scope     | Purpose                                           |
 | ----------------------------------- | --------- | ------------------------------------------------- |
 | `roles/storage.objectAdmin`         | Terraform state bucket (INFRA-015) | Read/write Terraform state and lock files |
-| Additional roles                    | Project   | To be determined during implementation — scoped to the minimum required for managing resources defined in INFRA-016 |
+| `roles/run.admin`                   | Project   | Manage Cloud Run services (INFRA-003)             |
+| `roles/cloudfunctions.admin`        | Project   | Manage Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014) |
+| `roles/compute.networkAdmin`        | Project   | Manage VPC, subnets, firewall rules (INFRA-009)   |
+| `roles/dns.admin`                   | Project   | Manage Cloud DNS zones and records (INFRA-017)    |
+| `roles/artifactregistry.admin`      | Project   | Manage Artifact Registry repositories (INFRA-018) |
+| `roles/logging.admin`               | Project   | Manage log sinks, log buckets (INFRA-007, INFRA-010) |
+| `roles/monitoring.admin`            | Project   | Manage alerting policies, dashboards (OBS-005, OBS-006) |
+| `roles/iam.serviceAccountAdmin`     | Project   | Manage service accounts (SEC-013)                 |
+| `roles/pubsub.admin`               | Project   | Manage Pub/Sub topics and subscriptions (INFRA-008c) |
+| `roles/bigquery.admin`             | Project   | Manage BigQuery datasets and log sinks (INFRA-010) |
+| `roles/datastore.user`             | Project   | Manage Firestore Enterprise and Native databases (INFRA-006, INFRA-012) |
 
-> **Note**: The full set of IAM roles for the Terraform service account will be finalized during the implementation phase when the exact Terraform resource definitions are known. Roles will follow the principle of least privilege — only the permissions required to manage the specific resources in the Terraform configuration will be granted.
+> **Note**: The IAM roles above represent the minimum set required for managing resources defined in INFRA-016. Roles follow the principle of least privilege. Additional roles may be needed if Terraform scope expands; any additions SHALL be documented with justification. (CLR-149)
 
 **Workload Identity Federation Configuration (Terraform CI/CD)**:
 
@@ -495,7 +506,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - For local Terraform runs (development/debugging), the project owner MAY use a service account key stored securely outside any repository. This key SHALL NOT be committed to any repository.
 - The Terraform CI/CD pipeline authenticates via WIF using the `google-github-actions/auth` action, consistent with the pattern established in SEC-010.
 - IF a service account key is used for local runs and is compromised, THE SYSTEM SHALL revoke the key immediately, generate a new one, and audit recent Terraform state changes.
-- The service account SHALL NOT have access to application data (Firestore Enterprise collections, BigQuery analytics data, etc.) — only infrastructure management permissions.
+- The service account SHOULD minimize access to application data. Where infrastructure management roles (e.g., `roles/datastore.user`) inherently grant data-level access, this is an accepted trade-off documented in CLR-149. (CLR-192)
 - The Terraform state bucket (INFRA-015) SHALL NOT be publicly accessible. Only the Terraform service account SHALL have write access.
 - Reference: [Workload Identity Federation for GitHub Actions](https://cloud.google.com/iam/docs/workload-identity-federation), [google-github-actions/auth](https://github.com/google-github-actions/auth)
 
@@ -509,13 +520,13 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | # | Service Account Email | Name | Purpose | Key IAM Roles | Scope | Managed By |
 |---|----------------------|------|---------|---------------|-------|------------|
-| 1 | `cloud-run-api@<project-id>.iam.gserviceaccount.com` | Cloud Run API SA | Identity for the Go backend API (INFRA-003) | `roles/datastore.viewer` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI), `roles/storage.objectViewer` (media bucket `<project-id>-media-bucket`, INFRA-019), Firestore Enterprise access (MongoDB wire protocol, via project-level role or custom role) | Project / specific resources | Terraform |
-| 2 | `cf-sitemap-gen@<project-id>.iam.gserviceaccount.com` | Sitemap Generator SA | Identity for the `generate-sitemap` Cloud Function (INFRA-008a) | Firestore Enterprise read (article collections: `technical_articles`, `blog_articles`) + read/write (`sitemap` collection) | INFRA-008a function | Terraform |
-| 3 | `cf-rate-limit-proc@<project-id>.iam.gserviceaccount.com` | Rate Limit Log Processor SA | Identity for the `process-rate-limit-logs` Cloud Function (INFRA-008c) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008c function | Terraform |
-| 4 | `cf-offender-cleanup@<project-id>.iam.gserviceaccount.com` | Offender Cleanup SA | Identity for the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d) | Firestore Enterprise read/write (`rate_limit_offenders` collection) | INFRA-008d function | Terraform |
+| 1 | `cloud-run-api@<project-id>.iam.gserviceaccount.com` | Cloud Run API SA | Identity for the Go backend API (INFRA-003) | `roles/datastore.viewer` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI), `roles/storage.objectViewer` (media bucket `<project-id>-media-bucket`, INFRA-019), `roles/datastore.user` (Firestore Enterprise, MongoDB wire protocol auth via IAM — CLR-148) | Project / specific resources | Terraform |
+| 2 | `cf-sitemap-gen@<project-id>.iam.gserviceaccount.com` | Sitemap Generator SA | Identity for the `generate-sitemap` Cloud Function (INFRA-008a) | `roles/datastore.user` (Firestore Enterprise — read `technical_articles`, `blog_articles`; read/write `sitemap`) (CLR-185) | INFRA-008a function | Terraform |
+| 3 | `cf-rate-limit-proc@<project-id>.iam.gserviceaccount.com` | Rate Limit Log Processor SA | Identity for the `process-rate-limit-logs` Cloud Function (INFRA-008c) | `roles/datastore.user` (Firestore Enterprise — read/write `rate_limit_offenders`) (CLR-185) | INFRA-008c function | Terraform |
+| 4 | `cf-offender-cleanup@<project-id>.iam.gserviceaccount.com` | Offender Cleanup SA | Identity for the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d) | `roles/datastore.user` (Firestore Enterprise — read/write `rate_limit_offenders`) (CLR-185) | INFRA-008d function | Terraform |
 | 5 | `cf-embed-sync@<project-id>.iam.gserviceaccount.com` | Embedding Sync SA | Identity for the `sync-article-embeddings` Cloud Function (INFRA-014) | Firestore Enterprise read (articles), `roles/datastore.user` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI) | INFRA-014 function | Terraform |
 | 6 | `content-cicd@<project-id>.iam.gserviceaccount.com` | Content CI/CD SA | WIF-mapped SA for content repository GitHub Actions (SEC-010). Used only for invoking the embedding sync function — Firestore Enterprise write access for content publishing uses separate credentials provisioned in the content pipeline project (out of scope). | `roles/cloudfunctions.invoker`, `roles/run.invoker` on `sync-article-embeddings` | INFRA-014 function | Terraform |
-| 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (state bucket), additional infra-management roles (TBD) | Project | **Manual** (bootstrap) |
+| 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (state bucket), `roles/run.admin`, `roles/cloudfunctions.admin`, `roles/compute.networkAdmin`, `roles/dns.admin`, `roles/artifactregistry.admin`, `roles/logging.admin`, `roles/monitoring.admin`, `roles/iam.serviceAccountAdmin`, `roles/pubsub.admin`, `roles/bigquery.admin`, `roles/datastore.user` (CLR-149) | Project | **Manual** (bootstrap) |
 | 8 | `looker-studio-reader@<project-id>.iam.gserviceaccount.com` | Looker Studio Reader SA | Read-only BigQuery access for Looker Studio dashboards (SEC-009, INFRA-011) | `roles/bigquery.dataViewer` (dataset), `roles/bigquery.jobUser` (project) | `website_logs` dataset + project | Terraform |
 | 9 | `cloud-scheduler-invoker@<project-id>.iam.gserviceaccount.com` | Cloud Scheduler Invoker SA | OIDC token issuer for Cloud Scheduler jobs (INFRA-008b, 008e, 014b) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on target Cloud Functions | Target functions | Terraform |
 
@@ -530,7 +541,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 > **Exception**: Firebase Functions (INFRA-002) uses the Firebase default service account because it only serves static HTML content and does not access any GCP resources. The default SA is acceptable for this component since it has no meaningful permissions to abuse.
 
-> **Note**: The exact IAM roles for the Cloud Run SA (#1) regarding Firestore Enterprise access will be finalized during implementation, depending on how the MongoDB wire protocol authentication is configured. At minimum, the SA needs credentials or IAM-based access to the Firestore Enterprise MongoDB endpoint.
+> **Note**: The Cloud Run SA (#1) uses `roles/datastore.user` for Firestore Enterprise access via IAM-based MongoDB wire protocol authentication. The Cloud Run service connects using the connection string approach documented at https://docs.cloud.google.com/firestore/mongodb-compatibility/docs/connect#cloud-run. (CLR-148)
 
 ---
 

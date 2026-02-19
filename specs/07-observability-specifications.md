@@ -1,8 +1,8 @@
 ---
 title: Observability Specifications
-version: 3.2
+version: 3.4
 date_created: 2026-02-17
-last_updated: 2026-02-18
+last_updated: 2026-02-19
 owner: TJ Monserrat
 tags: [observability, logging, monitoring, tracking, vector-search, terraform, alerting, sli, slo, breadcrumbs]
 ---
@@ -306,6 +306,8 @@ const speedInfo = connection ? {
 ```
 
 > **Note**: This example shows the raw browser API values. The frontend converts `effectiveType` to `effective_type` before sending to the backend (see FE-COMP-004, CLR-130). The backend receives and logs snake_case field names. (CLR-138)
+
+> **Note**: `connection_speed` relies on the Network Information API (`navigator.connection.effectiveType`), which is not supported in all browsers (notably Safari/Firefox). WHEN the Network Information API is unavailable, the `connection_speed` field SHALL be omitted from the event payload. (CLR-176)
 
 **Error Categories to Track**:
 

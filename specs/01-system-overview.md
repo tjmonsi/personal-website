@@ -1,8 +1,8 @@
 ---
 title: System Overview
-version: 3.1
+version: 3.2
 date_created: 2026-02-17
-last_updated: 2026-02-17
+last_updated: 2026-02-19
 owner: TJ Monserrat
 tags: [architecture, system-overview, infrastructure]
 ---
@@ -189,6 +189,8 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
               └──────────────────────────────────┘
 ```
 
+> **Note**: The `/privacy` and `/changelog` pages are static views rendered from local markdown files bundled with the SPA (no API fetch required). (CLR-187)
+
 ### Key Architectural Decisions
 
 | ID     | Decision                                      | Rationale                                                                 |
@@ -203,7 +205,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 | AD-008 | Content managed via separate Git repository    | Articles and content are maintained in a dedicated repo; a CI/CD pipeline pushes content to the database on merge. Keeps the public API read-only. |
 | AD-009 | Frontend SPA with offline reading support      | Not installable as PWA, but supports offline reading via smart prefetching and manual article saving in the browser |
 | AD-010 | Free-form categories derived from articles     | Categories are stored in a dedicated collection and synced from article metadata. Frontend caches categories in sessionStorage for 24 hours. |
-| AD-011 | VPC with Private Google Access and Direct VPC Egress (Production only) | In Production, Cloud Run and Cloud Functions use Direct VPC Egress to route traffic through the VPC, restricting egress to Google Cloud APIs only. Direct VPC Egress requires no separate connector instances, reducing cost versus Serverless VPC Access Connectors. No NAT router needed — minimizes cost and attack surface. The Development environment does NOT use a VPC to reduce cost; services connect to Google Cloud APIs directly. Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc |
+| AD-011 | VPC with Private Google Access and Direct VPC Egress (Production only) | Production uses Direct VPC Egress for secure database connectivity — Cloud Run and Cloud Functions route traffic through the VPC, restricting egress to Google Cloud APIs only. Direct VPC Egress requires no separate connector instances, reducing cost versus Serverless VPC Access Connectors. No NAT router needed — minimizes cost and attack surface. (Development is local-only and has no GCP networking; see Environments.) Reference: https://cloud.google.com/run/docs/configuring/vpc-direct-vpc (CLR-181) |
 | AD-012 | Cloud Function for sitemap generation            | Sitemap generation runs as a separate internal Cloud Function (Gen 2, Node.js), triggered by Cloud Scheduler every 6 hours. Keeps the API backend focused on serving requests. |
 | AD-013 | Frontend routes include `.md` extension          | Article URLs use `.md` extension (e.g., `/technical/slug.md`) to present the appearance of accessing a markdown file, while content is dynamically fetched from the backend API. |
 | AD-014 | Cloud Function for offense tracking from Cloud Armor logs | A log sink routes Cloud Armor rate-limit (429) events to a Cloud Function, which writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor's request-level rate limiting and the application's progressive banning logic. |
@@ -213,7 +215,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 | AD-018 | Dual-database: Firestore Enterprise + Firestore Native | Firestore Enterprise (MongoDB compat) stores all application data. Firestore Native stores vector embeddings for semantic article search. Two databases in the same project, each optimized for its purpose. The Go API uses the MongoDB Go driver for Enterprise and the Firestore Go SDK for Native. |
 | AD-019 | Deterministic embedding cache with UUID v5         | Search query embeddings are cached in Firestore Enterprise (`embedding_cache` collection, DM-011) using UUID v5 of the lowercased query as the document ID. No search strings are stored — only the deterministic UUID and the embedding vector. No cache expiration. The UUID v5 namespace is the standard URL namespace (`6ba7b811-9dad-11d1-80b4-00c04fd430c8`) with name = lowercased search text. |
 | AD-020 | Cosine distance threshold for vector search        | Search results with cosine distance > 0.35 (cosine similarity < 0.65) are excluded. This threshold balances recall and precision for semantic article search. Configurable per deployment. Reference: https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings |
-| AD-021 | Vector search replaces text search for `q` parameter | When the `q` query parameter is present, the system uses Gemini embedding + Firestore Native vector similarity search instead of MongoDB text indexes. Without `q`, queries use Firestore Enterprise directly. Filtering (category, tags, date range) is always applied in Firestore Enterprise. |
+| AD-021 | Vector search replaces text search for `q` parameter | When the `q` query parameter is present, the system uses Gemini embedding + Firestore Native vector similarity search instead of MongoDB text indexes. Without `q`, queries use Firestore Enterprise directly. Filtering (category, tags, date range) is always applied in Firestore Enterprise. For the detailed query coordination strategy (vector search + filter pipeline), see BE-API-002 Vector Search Flow in the Backend API Specifications. (CLR-183) |
 | AD-022 | Workload Identity Federation for content CI/CD | The content repository's GitHub Actions pipeline authenticates to GCP via Workload Identity Federation (WIF) — no long-lived service account keys. WIF provides OIDC-based authentication to invoke the `sync-article-embeddings` Cloud Function (INFRA-014) after pushing content. Reference: https://cloud.google.com/iam/docs/workload-identity-federation |
 | AD-023 | Terraform for infrastructure management | GCP infrastructure is managed declaratively via Terraform. Configuration files are stored in this repository under `/terraform/`. State is stored remotely in a GCS bucket (INFRA-015) with versioning and locking. The state bucket and Terraform service account are manually created bootstrap resources. Project ID is obfuscated in documentation for security. Reference: https://www.terraform.io/ |
 
@@ -246,7 +248,7 @@ Content (articles, front page, social links, external references) is managed thr
 
 | Environment | Purpose                                                   | Database          |
 | ----------- | --------------------------------------------------------- | ----------------- |
-| Development | Local development and testing only (no GCP deployment)    | Firestore Emulator / Local MongoDB (Firestore Enterprise), Local Firestore Emulator (Firestore Native) |
+| Development | Local development and testing only (no GCP deployment)    | Local MongoDB (for Firestore Enterprise MongoDB-compat development) (CLR-182), Local Firestore Emulator (Firestore Native) |
 | Production  | Live website                                              | Production Firestore Enterprise + Production Firestore Native |
 
 > **Note**: Only two environments are maintained. The Development environment is **local-only** — it runs entirely on the developer's machine using emulators and local databases. No GCP resources are provisioned or deployed for Development. The `dev` branch is used for local development and testing; code is merged to `main` for Production deployment. The owner can deploy immediately, so no separate staging GCP project is needed.

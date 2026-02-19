@@ -1,8 +1,8 @@
 ---
 title: Data Model Specifications
-version: 2.7
+version: 2.9
 date_created: 2026-02-17
-last_updated: 2026-02-18
+last_updated: 2026-02-19
 owner: TJ Monserrat
 tags: [data-model, database, firestore, mongodb, vector-search]
 ---
@@ -68,6 +68,8 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `idx_tags`              | `tags`                          | Multikey | Tag filtering                |
 | `idx_date_updated`      | `date_updated`                  | Standard | Date range queries, sorting  |
 | `idx_date_created`      | `date_created`                  | Standard | Internal use / content management queries |
+| `idx_category_date`     | `{ category: 1, date_updated: -1 }` | Compound | Category-filtered listing sorted by date (CLR-184) |
+| `idx_tags_date`         | `{ tags: 1, date_updated: -1 }`     | Compound | Tag-filtered listing sorted by date (CLR-184) |
 
 > **Note**: Full-text search is handled by vector similarity search via Firestore Native (see DM-012), not by MongoDB text indexes.
 
@@ -91,7 +93,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | -------------- | ---------- | -------- | ---------------------------------------------- |
 | (Same as DM-002) | | | |
 
-**Indexes**: Same as DM-002.
+**Indexes**: Same as DM-002 (including compound indexes `idx_category_date` and `idx_tags_date`). (CLR-184)
 
 > **Design Decision**: Separate collections for technical and blog articles to maintain clear data boundaries, despite identical schemas. This allows independent scaling, querying, and potential future schema divergence.
 
@@ -152,6 +154,8 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `idx_tags`              | `tags`                          | Multikey | Tag filtering                |
 | `idx_date_created`      | `date_created`                  | Standard | Internal use / content management queries |
 | `idx_date_updated`      | `date_updated`                  | Standard | Date range queries           |
+| `idx_category_date`     | `{ category: 1, date_updated: -1 }` | Compound | Category-filtered listing sorted by date (CLR-184) |
+| `idx_tags_date`         | `{ tags: 1, date_updated: -1 }`     | Compound | Tag-filtered listing sorted by date (CLR-184) |
 
 > **Note**: Full-text search for `others` is handled by vector similarity search via Firestore Native (see DM-012), not by MongoDB text indexes.
 
@@ -198,7 +202,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | Field             | Type       | Required | Description                                 |
 | ----------------- | ---------- | -------- | ------------------------------------------- |
 | `_id`             | string     | Yes      | Document identifier                         |
-| `identifier`      | string     | Yes      | Client identifier (IP or fingerprint)       |
+| `identifier`      | string     | Yes      | Full (untruncated) client IP address (CLR-157, CLR-186) |
 | `offense_count`   | integer    | Yes      | Total rate limit violations                 |
 | `offense_history` | object[]   | Yes      | Array of offense records                    |
 | `offense_history[].timestamp` | datetime | Yes | When the offense occurred          |
@@ -278,6 +282,8 @@ On each cache lookup, the Go backend SHALL:
 
 This ensures the cache self-heals incrementally when the model is upgraded, without requiring a bulk invalidation.
 
+> **Note**: The embeddings cache collection will grow proportionally with the number of unique search queries. Given the expected scale (~100–500 cached queries), this growth is manageable. If the cached query count exceeds 1,000, consider implementing a TTL-based eviction policy or evicting least-recently-used entries. (CLR-173)
+
 **Manual Cache Invalidation Procedure** (CLR-125):
 
 For immediate full invalidation (e.g., during a model upgrade rollout), an operator can clear the entire cache:
@@ -312,6 +318,7 @@ doc_id    = UUID_v5(namespace, name)
 | Document ID          | string     | Yes      | Same `_id` as the corresponding `technical_articles` document in Firestore Enterprise |
 | `embedding`          | vector(2048)| Yes      | 2048-dimensional embedding vector (Gemini `gemini-embedding-001`, task type: `RETRIEVAL_DOCUMENT`, L2-normalized) |
 | `embedding_text_hash`| string     | Yes      | SHA-256 hash of the source text used for embedding (for change detection during sync) |
+| `model_version`      | string     | Yes      | The embedding model identifier used to generate this vector (e.g., `gemini-embedding-001`). The sync function compares this against the currently configured model; if mismatched, the article is re-embedded regardless of hash. (CLR-152) |
 | `updated_at`         | datetime   | Yes      | When the embedding was last generated (UTC)    |
 
 **Embedding Source Text**: `title + "\n" + abstract + "\n" + category + "\n" + tags (comma-separated)`
@@ -407,11 +414,11 @@ others_vectors (many documents) [Firestore Native]
 
 ### Acceptance Criteria
 
-- **AC-DM-001**: Given the Firestore Enterprise database, when the schema is initialized, then all collections (`technical_articles`, `blog_articles`, `others`, `categories`, `sitemap`, `rate_limit_offenders`) exist and accept documents matching their defined schemas.
+- **AC-DM-001**: Given the Firestore Enterprise database, when the schema is initialized, then all collections (`frontpage`, `technical_articles`, `blog_articles`, `socials`, `others`, `categories`, `sitemap`, `rate_limit_offenders`, `embedding_cache`) exist and accept documents matching their defined schemas.
 - **AC-DM-002**: Given a `technical_articles` document, when it is created, then all required fields (`slug`, `category`, `tags`, `title`, `abstract`, `content`, `changelog`, `date_created`, `date_updated`) are present and correctly typed. (CLR-105)
 - **AC-DM-003**: Given the Firestore Native database, when vector collections are synced, then each article has a corresponding vector document with an `embedding` field containing a 2048-dimension float array. (CLR-105, CLR-134)
 - **AC-DM-004**: Given the `rate_limit_offenders` collection, when an offender document's `current_ban` is null or `current_ban.end` has passed and no offenses in the last 90 days, then the cleanup function deletes the document. (CLR-105)
-- **AC-DM-005**: Given a query on `technical_articles` with filters on `category`, `tags`, and `date_updated`, when the query executes, then the defined compound indexes support the query without a full collection scan.
+- **AC-DM-005**: Given a query on `technical_articles` with filters on `category`, `tags`, and `date_updated`, when the query executes, then the defined compound indexes (`idx_category_date`, `idx_tags_date`) support the query without a full collection scan. (CLR-184)
 - **AC-DM-006**: Given the `slug` field on any article collection, when a duplicate slug is inserted, then the unique index prevents the insertion.
 - **AC-DM-011-A**: Given the embedding cache, when a cache hit occurs with a mismatched `model_version`, then the system SHALL treat it as a cache miss and re-generate the embedding. (CLR-136)
-- **AC-DM-011-B**: Given a model version change, when `sync-article-embeddings` runs, then it SHALL regenerate all embeddings and update `model_version` in all cache entries. (CLR-136)
+- **AC-DM-011-B**: Given a model version change, when `sync-article-embeddings` runs, then it SHALL detect the `model_version` mismatch in DM-012 vector documents and regenerate all embeddings, updating the `model_version` field in each vector document. The DM-011 embedding cache self-heals incrementally via the `model_version` check in BE-API-002. (CLR-136, CLR-152)

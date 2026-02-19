@@ -1,8 +1,8 @@
 ---
 title: Frontend Specifications
-version: 2.8
+version: 3.0
 date_created: 2026-02-17
-last_updated: 2026-02-18
+last_updated: 2026-02-19
 owner: TJ Monserrat
 tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 ---
@@ -31,7 +31,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 | Deep Link        | A URL that encodes enough state to restore a specific view, including active search terms, applied filters, and current page |
 | Heading Slug     | A URL-safe string derived from heading text by converting to lowercase, replacing spaces with hyphens, and removing special characters (e.g., "My Section Title" → `my-section-title`) |
 | `visitor_session_id` | A random UUID v4 generated per browser session, stored in `sessionStorage`. Used to correlate tracking events within a single visit. Not linked to any real-world identity and not persisted across sessions. |
-| `visitor_id`     | A SHA-256 hash computed server-side from `visitor_session_id` + truncated IP + User-Agent. A non-reversible, session-scoped identifier for unique visitor counting and bot discrimination. |
+| `visitor_id`     | A SHA-256 hash computed server-side from `visitor_session_id` + `":"` + truncated IP + `":"` + User-Agent (colon-delimited). A non-reversible, session-scoped identifier for unique visitor counting and bot discrimination. (CLR-156) |
 | Link Click Tracking | Fire-and-forget anonymous tracking of anchor element clicks, sent via `navigator.sendBeacon()` (with `fetch()` + `keepalive: true` fallback) to `POST /t`. |
 | Time-on-Page Milestone | An engagement signal sent when a user remains on a page for 1, 2, or 5 minutes of active foreground time. Only foreground time counts (uses Page Visibility API). |
 | Breadcrumb Trail | An in-memory ring buffer of up to 50 recent user interactions (navigations, clicks, API calls, filter changes, errors, connectivity changes) recorded by FE-COMP-013. Attached to error reports for debugging context. Does not contain personal information, passwords, or tokens. |
@@ -54,6 +54,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - Opinions (`/blog`)
   - Other Links (`/socials`)
   - Notable Notes Outside (`/others`)
+
+> **Note**: The front page relies on browser-native HTTP caching. The browser automatically handles `Cache-Control`, `ETag`, and `If-None-Match` headers returned by BE-API-001. No explicit conditional request logic is required in the SPA code. Offline access to the front page is not required. (CLR-190)
 
 ---
 
@@ -119,6 +121,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - Default state: collapsed
   - WHEN expanded, shows version history entries with date and description
 - THE SYSTEM SHALL render the markdown article body.
+- THE SYSTEM SHALL use `markdown-it` for Markdown-to-HTML conversion and `DOMPurify` for HTML sanitization when rendering markdown content. This combination is lightweight, actively maintained, and compatible with Vue 3 / Nuxt 4. This applies to all pages that render markdown (FE-PAGE-001, FE-PAGE-003, FE-PAGE-005). (CLR-159)
 - **Image Constraints** (CLR-104):
   - Articles SHALL NOT contain external image references except for images hosted on `tjmonsi.com` or `api.tjmonsi.com`.
   - Images in articles are limited to: inline `data:` URIs, images hosted on the frontend domain (`tjmonsi.com`), or images served via the backend image proxy endpoint (`https://api.tjmonsi.com/images/{path}`, see BE-API-013).
@@ -290,6 +293,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - **Changes to This Policy**: Notice that the policy may be updated, with the last updated date displayed.
 - THE SYSTEM SHALL link the privacy policy from the site footer on all pages (see FE-COMP-010).
 
+> **Note**: The `/privacy` page is a static view rendered from a local markdown file bundled with the SPA (no API fetch required). (CLR-187)
+
 ---
 
 #### FE-PAGE-010: Changelog (`/changelog`)
@@ -305,6 +310,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - A version identifier or date
   - A brief description of changes
 - THE SYSTEM SHALL display a "Last updated" date at the top of the page.
+
+> **Note**: The `/changelog` page is a static view rendered from a local markdown file bundled with the SPA (no API fetch required). (CLR-187)
 
 ---
 
@@ -345,14 +352,12 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 | 404         | "The content you're looking for doesn't exist or has been removed."                              |
 | 405         | "This action is not supported."                                                                  |
 | 429         | "Whoa there! You're sending too many requests. Take a breather and try again in about 30 minutes. If this keeps happening, try a different network — or make sure you're not browsing like a bot!" |
-
-- **429 handling note**: The frontend SHALL match 429 responses by HTTP status code only. It SHALL NOT attempt to parse or depend on the response body for 429 responses, because Cloud Armor generates these responses at the load balancer level and the body format may not be JSON (see CLR-042, INFRA-005 custom error response configuration).
-
 | 503         | "The service is temporarily unavailable. Please try again later."                                |
 | 504         | "TJ has been notified about the server taking too long." + randomized funny message (see below)  |
 | Other       | "Something went wrong. TJ has been notified of this issue."                                      |
 
-- Snackbar SHALL auto-dismiss after 10 seconds or be manually dismissable.
+- **429 handling note**: The frontend SHALL match 429 responses by HTTP status code only. It SHALL NOT attempt to parse or depend on the response body for 429 responses, because Cloud Armor generates these responses at the load balancer level and the body format may not be JSON (see CLR-042, INFRA-005 custom error response configuration).
+- Informational toasts (e.g., "Content saved for offline") SHALL auto-dismiss after **5 seconds**. Error toasts SHALL persist until the user manually dismisses them. (CLR-166)
 
 **504 Timeout Funny Messages**:
 
@@ -384,9 +389,10 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 **Delivery Mechanism**:
 
-- THE SYSTEM SHALL use `navigator.sendBeacon()` as the primary delivery method for all `POST /t` requests. The request body SHALL be sent as a JSON `Blob` with `Content-Type: application/json`, including the `token` field.
-- IF `navigator.sendBeacon()` is not available (e.g., in very old browsers), THE SYSTEM SHALL fall back to `fetch()` with `keepalive: true` as the delivery method.
-- This progressive fallback ensures reliable delivery during page unload events while maintaining broad browser compatibility.
+- THE SYSTEM SHALL use `navigator.sendBeacon()` as the primary delivery method for all **tracking** `POST /t` requests (actions: `page_view`, `link_click`, `time_on_page`). The request body SHALL be sent as a JSON `Blob` with `Content-Type: application/json`, including the `token` field. (CLR-153)
+- IF `navigator.sendBeacon()` is not available (e.g., in very old browsers), THE SYSTEM SHALL fall back to `fetch()` with `keepalive: true` as the delivery method for tracking events.
+- **Error reports** (`action: "error_report"`) SHALL use `fetch()` instead of `sendBeacon()` to enable HTTP status code inspection for the retry logic defined in FE-COMP-005-RETRY. `sendBeacon` is fire-and-forget and returns only a boolean, making retry decisions impossible. (CLR-153)
+- This separation ensures reliable delivery during page unload events for tracking while maintaining retry capability for error reports.
 
 **Visitor Session ID**:
 
@@ -405,6 +411,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - `referrer`: Referrer URL (if available)
   - `browser`: Browser name and version (from User-Agent, determined client-side)
   - `connection_speed`: Connection speed info from Navigator.connection API (if available). The frontend SHALL convert the browser API's camelCase field names (e.g., `effectiveType`) to snake_case (e.g., `effective_type`) before sending to maintain consistency with the backend's snake_case convention (CLR-130). THE SYSTEM SHALL extract only the following keys from `navigator.connection` and convert to snake_case: `effectiveType` → `effective_type`, `downlink` → `downlink`, `rtt` → `rtt`. Other properties SHALL NOT be sent. (CLR-142)
+  - Note: `connection_speed` relies on the Network Information API (`navigator.connection.effectiveType`), which is not supported in all browsers (notably Safari/Firefox). WHEN the Network Information API is unavailable (e.g., Safari, Firefox), THE SYSTEM SHALL omit the `connection_speed` field entirely from the tracking payload. The field is optional; the backend and BigQuery pipeline handle its absence gracefully. (CLR-176)
 - IP address and server-side timestamp are determined by the backend from request headers.
 
 **Link Click Tracking**:
@@ -464,7 +471,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 **Retry with Exponential Backoff** (FE-COMP-005-RETRY):
 
-- WHEN sending an error report to `POST /t` fails due to a network error (e.g., device is offline, DNS failure, connection refused), THE SYSTEM SHALL queue the failed payload in memory.
+- WHEN sending an error report to `POST /t` fails due to a network error (e.g., device is offline, DNS failure, connection refused), THE SYSTEM SHALL queue the failed payload in memory **without the `token` (JWT) field**. A fresh JWT SHALL be generated at send time when the queued report is retried or flushed. This ensures all retried reports have valid (non-expired) tokens, even after extended offline periods. (CLR-154)
 - THE SYSTEM SHALL retry sending the queued payload using exponential backoff with a maximum of **5 retry attempts**.
 - Retry delay schedule: 1 second, 2 seconds, 4 seconds, 8 seconds, 16 seconds (doubling each attempt, with ±20% random jitter applied to each delay to prevent synchronized retry storms — CLR-127). For example, a 4-second base delay becomes a random value between 3.2 and 4.8 seconds.
 - WHEN the retry succeeds, THE SYSTEM SHALL remove the payload from the queue, discard it silently, and display a brief toast notification: "Error reported. Thanks for helping improve the site!" The toast SHALL auto-dismiss after 5 seconds.
@@ -642,6 +649,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - WHEN the page loads with a `tags` query parameter in the URL, THE SYSTEM SHALL parse the comma-separated value, split by comma, trim each tag, convert to lowercase, deduplicate, and render each tag as a chip (deep linking support).
 - THE SYSTEM SHALL record a `filter_change` breadcrumb entry (FE-COMP-013) whenever a tag is added or removed, with the filter name `tags` and the new comma-separated value.
 - THE SYSTEM SHALL be fully keyboard accessible: the input is focusable via Tab, chips can be removed via keyboard (Backspace removes last chip, or focus on individual chips and press Delete/Backspace), and the component has an appropriate `aria-label` (e.g., "Filter by tags").
+- THE SYSTEM SHALL limit tag selection to a maximum of **10 tags** per filter. The UI SHALL disable further tag addition once the limit is reached and display a message (e.g., "Maximum of 10 tags reached"). (CLR-160)
 
 ---
 
@@ -656,10 +664,16 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - THE SYSTEM SHALL track user browsing patterns on the frontend (no server calls for this tracking).
   - Based on heuristics (e.g., articles the user has viewed partially, articles in the same category as recently read articles), THE SYSTEM SHALL prefetch and cache article content in the browser for offline reading.
   - Prefetching SHALL happen in the background without affecting page performance.
+  - THE SYSTEM SHALL use the following concrete parameters for smart download behavior: (CLR-158)
+    - **Scroll depth trigger**: WHEN the user has scrolled past **30%** of the current article's height, THE SYSTEM SHALL begin prefetching.
+    - **Prefetch count**: THE SYSTEM SHALL prefetch up to **3** articles per trigger (based on heuristic ranking).
+    - **Storage cap**: THE SYSTEM SHALL limit smart-download cached content to **50 MB** per session. WHEN the cap is reached, the oldest cached articles SHALL be evicted before new ones are stored.
+    - **Network condition**: THE SYSTEM SHALL only prefetch when `navigator.connection.effectiveType === '4g'` (proxy for high-bandwidth connections). WHEN the Network Information API is unavailable (Safari/Firefox), smart download prefetching SHALL be disabled. (CLR-177)
 - **Manual Save**:
   - WHEN the user clicks "Save for offline reading" on an article page (FE-PAGE-003, FE-PAGE-005) or the list view (FE-PAGE-002, FE-PAGE-004), THE SYSTEM SHALL download and store the full article content locally.
 - **Offline Availability Indicator**:
   - In list views (FE-PAGE-002, FE-PAGE-004), each article item SHALL display an indicator showing whether the article is available for offline reading.
+  - The offline indicator SHALL display a cloud-off icon (e.g., `mdi-cloud-off-outline` or equivalent) when the device is offline, and a cloud-check icon when cached content is being served. (CLR-169)
 - **Storage**:
   - **Cache API**: THE SYSTEM SHALL use the Cache API (via service worker) to cache article content HTTP responses. This enables fast retrieval of full article content when offline or on repeat visits.
   - **IndexedDB**: THE SYSTEM SHALL use IndexedDB to store article metadata (title, slug, category, tags, dates, abstract), reading state (e.g., reading progress, last accessed timestamp), and article content as structured data for quick retrieval without requiring a network request via the Cache API.
@@ -672,6 +686,10 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
     - IF the backend returns `304 Not Modified`, the cached content is still current — no download or cache update is needed.
     - IF the backend returns `200` with updated content, THE SYSTEM SHALL update the cache and optionally notify the user that newer content is available.
   - IF the device is offline and no cached content exists, THE SYSTEM SHALL display a message indicating the article is not available offline.
+
+**Service Worker Lifecycle** (CLR-170):
+
+- THE SYSTEM SHALL use a "stale-while-revalidate" strategy for the service worker lifecycle. When a new service worker version is available, the system SHALL notify the user via a non-intrusive toast ("New version available — refresh to update") and activate the new worker on the next navigation or manual refresh. The system SHALL NOT force-activate a new service worker while the user is actively browsing to avoid disrupting the experience.
 
 **Service Worker Update Notification**:
 
@@ -691,7 +709,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - A link to the changelog page (`/changelog`, see FE-PAGE-010) so the user can review what changed.
   - A "Refresh now" button that activates the new service worker and reloads the page.
   - A manual dismiss button.
-- The update snackbar SHALL auto-dismiss after **20 seconds** if the user does not interact with it. This is longer than the default 10-second snackbar duration to give the user time to read the update information.
+- The update snackbar SHALL auto-dismiss after **20 seconds** if the user does not interact with it. This is longer than the standard 5-second informational toast duration (FE-COMP-003) to give the user time to read the update information.
 - IF the user dismisses the snackbar without refreshing, the new service worker SHALL be activated on the next full page load or navigation.
 
 ---
@@ -714,7 +732,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - "You stumped me. Try a different search?"
 - **Repeated Empty Search Detection**:
   - THE SYSTEM SHALL track consecutive empty search results in the current session (frontend-only, no server call).
-  - IF the user submits a search that returns the same empty result (same or similar query), THE SYSTEM SHALL escalate the message to a more humorous tone. Examples:
+  - THE SYSTEM SHALL detect duplicate search requests using the full request signature: `q` + `category` + `tags` + `tag_match` + `date_from` + `date_to`. Two requests are considered duplicates when their `q` values match (exact string match or Levenshtein distance ≤ 2) AND all filter parameters are identical. Duplicate requests SHALL return cached results instead of making a new API call. (CLR-165, CLR-179)
+  - IF the user submits a search that returns the same empty result (matching the "similar" query criteria above), THE SYSTEM SHALL escalate the message to a more humorous tone. Examples:
     - "What are you trying to find? I genuinely want to help."
     - "Try and try again, but the results won't change."
     - "Did I ever tell you what the definition of insanity is? Insanity is doing the exact same thing over and over again expecting things to change."
@@ -827,7 +846,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-007**: Given a rendered article with image references, when images use `https://api.tjmonsi.com/images/...` URLs, then images load successfully under the CSP `img-src` policy.
 - **AC-FE-008**: Given a user visiting any page, when the page loads, then a `page_view` tracking event is sent to `POST /t` with the JWT `token` in the request body via `navigator.sendBeacon()` (or `fetch` fallback).
 - **AC-FE-009**: Given a user clicking an anchor element, when the click event fires, then a `link_click` tracking event is sent asynchronously without blocking navigation.
-- **AC-FE-010**: Given a backend error response, when the response status is 429, then a snackbar displays a message advising the user to wait approximately 30 minutes before retrying, suggests trying a different network if the issue persists, and hints that bot-like browsing behavior may trigger rate limiting. The snackbar auto-dismisses after 10 seconds.
+- **AC-FE-010**: Given a backend error response, when the response status is 429, then a snackbar displays a message advising the user to wait approximately 30 minutes before retrying, suggests trying a different network if the issue persists, and hints that bot-like browsing behavior may trigger rate limiting. The error snackbar persists until the user manually dismisses it (CLR-166).
 - **AC-FE-011**: Given a previously visited article cached offline, when the user goes offline and navigates to that article, then the cached content is rendered.
 - **AC-FE-012**: Given a new service worker version is detected, when the user is on the site, then an update snackbar appears with a randomly selected humorous message, a changelog link, and a refresh button, displayed for 20 seconds.
 - **AC-FE-013**: Given a user visiting `/changelog`, when the page loads, then a chronological list of frontend changes is displayed.
