@@ -1,8 +1,8 @@
 ---
 title: Backend API Specifications
-version: 3.4
+version: 3.5
 date_created: 2026-02-17
-last_updated: 2026-02-19
+last_updated: 2026-02-20
 owner: TJ Monserrat
 tags: [backend, api, go, fiber, cloud-run, breadcrumbs]
 ---
@@ -867,3 +867,12 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-GEO-002**: Given a `POST /t` request where the GeoIP lookup fails or returns no result, then the system SHALL set `geo_country` to `"unknown"` in the structured log entry. (CLR-137)
 - **AC-API-023**: Given any request that results in a 4xx application error, when the response is returned, then the body conforms to `{ "error": { "code": "<ERROR_CODE>", "message": "<description>" } }` as defined in the Standard Error Response Body schema. (CLR-180)
 - **AC-API-024**: Given a `GET /technical?q=` request (empty query string), when articles exist, then the response items are sorted by `date_updated` descending and vector search is NOT invoked. (CLR-189)
+- **AC-API-025**: Given a valid `GET /` request, when the front page document exists in Firestore, then the response returns `200` with `text/markdown` content and appropriate `ETag` and `Cache-Control` headers.
+- **AC-API-026**: Given a valid `GET /blog` request, when articles exist, then the response returns `200` with `application/json` containing an `items` array and a `pagination` object with `current_page`, `total_pages`, `total_items`, and `page_size` (same format as `GET /technical`).
+- **AC-API-027**: Given a valid `GET /blog/{slug}.md` request, when the article exists, then the response returns `200` with `text/markdown` including YAML front matter and the full article body (same format as `GET /technical/{slug}.md`).
+- **AC-API-028**: Given a `GET /blog/{slug}.md` request with `If-None-Match` matching the current `ETag`, when the article has not changed, then the response returns `304 Not Modified` with no body.
+- **AC-API-029**: Given a valid `GET /socials` request, when social links exist, then the response returns `200` with `application/json` containing the list of social media entries.
+- **AC-API-030**: Given a valid `GET /others` request, when items exist, then the response returns `200` with `application/json` containing an `items` array and a `pagination` object (same format as `GET /technical`).
+- **AC-API-031**: Given a valid `GET /categories` request, when categories exist, then the response returns `200` with `application/json` containing the categories list and `Cache-Control: public, max-age=86400`.
+- **AC-API-032**: Given a `GET /health` request, when the service is running, then the response returns `200` with `application/json` indicating the service is healthy.
+- **AC-API-033**: Given a `GET /robots.txt` request to `api.tjmonsi.com`, when processed, then the response returns `200` with `text/plain` containing `User-agent: *` and `Disallow: /`.

@@ -1,8 +1,8 @@
 ---
 title: Security Specifications
-version: 3.6
+version: 3.7
 date_created: 2026-02-17
-last_updated: 2026-02-19
+last_updated: 2026-02-20
 owner: TJ Monserrat
 tags: [security, rate-limiting, cors, authentication, vector-search, terraform, iac, wif, service-accounts]
 ---
@@ -560,3 +560,11 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - **AC-SEC-008**: Given any service account in the system, when its IAM roles are reviewed, then no SA has `roles/owner` or `roles/editor`.
 - **AC-SEC-009**: Given the Cloud Run container, when it runs, then it executes as non-root user `jack` (UID 10001) on a distroless base image.
 - **AC-SEC-010**: Given a CORS preflight `OPTIONS` request, when the backend processes it, then it returns CORS headers and is not subject to application-level ban checks.
+- **AC-SEC-011**: Given a search query exceeding 300 characters, when submitted to any search endpoint (`GET /technical`, `GET /blog`, `GET /others`), then the backend returns HTTP `400`.
+- **AC-SEC-012**: Given an article slug not matching the regex `^[a-z0-9]+(?:-[a-z0-9]+)*-\d{4}-\d{2}-\d{2}-\d{4}\.md$`, when requesting an article detail endpoint, then the backend returns HTTP `404`.
+- **AC-SEC-013**: Given a `POST /t` error report with a `breadcrumbs` array exceeding 50 entries, when the backend validates it, then the array is truncated to the last 50 entries (newest kept) and a WARNING is logged — the request is NOT rejected.
+- **AC-SEC-014**: Given the Go backend's in-memory ban status LRU cache (SEC-002), when a ban lookup is performed, then the cache uses a 60-second TTL and a maximum of 1000 entries; on cache miss, Firestore is queried and the result is cached.
+- **AC-SEC-015**: Given the CI/CD pipeline, when the build runs, then Go dependencies are audited with `govulncheck` and frontend dependencies are audited with `npm audit`; Docker images are scanned for vulnerabilities before deployment.
+- **AC-SEC-016**: Given the content CI/CD pipeline (SEC-010), when GitHub Actions authenticates to GCP, then Workload Identity Federation is used (no long-lived service account keys) and the WIF provider attribute condition restricts access to the specific content repository.
+- **AC-SEC-017**: Given the Cloud Run service account, when accessing Firestore Native (`vector-search` database), then it has only `roles/datastore.viewer` (read-only); write access to Firestore Native is restricted to the `sync-article-embeddings` Cloud Function SA.
+- **AC-SEC-018**: Given query parameters on any `GET` endpoint, when unknown or malformed parameters are present, then the backend returns HTTP `400` with a standard error response body.

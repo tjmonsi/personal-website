@@ -1,8 +1,8 @@
 ---
 title: Frontend Specifications
-version: 3.1
+version: 3.2
 date_created: 2026-02-17
-last_updated: 2026-02-19
+last_updated: 2026-02-20
 owner: TJ Monserrat
 tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 ---
@@ -868,3 +868,23 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-025**: Given the tag chip input on `/technical`, `/blog`, or `/others`, when the user types "Docker," (with trailing comma), then a lowercase chip "docker" appears and the text input is cleared.
 - **AC-FE-026**: Given one or more tag chips are displayed, when the user clicks a chip, then that tag is removed from the filter and the article list is updated.
 - **AC-FE-027**: Given the URL contains `tags=go,docker`, when the page loads, then two chips ("go" and "docker") are rendered in the tag input and the article list is filtered accordingly.
+- **AC-FE-028**: Given a user visiting `/`, when the page loads, then front page content is fetched from `GET /` and the raw markdown response is rendered on the page.
+- **AC-FE-029**: Given a user visiting `/technical/:slug.md`, when the article is loaded, then a table of contents is generated from H2/H3/H4 headings and displayed on the right side in a sticky position with scroll spy highlighting the currently visible heading.
+- **AC-FE-030**: Given a user clicking a table of contents entry on an article page, when the click occurs, then the page scrolls to the corresponding heading and the URL hash fragment is updated via `history.pushState()`.
+- **AC-FE-031**: Given a user on an article page hovering over a heading (H2/H3/H4), when the link icon is clicked, then the full URL with the heading's hash fragment is copied to the clipboard with a confirmation message.
+- **AC-FE-032**: Given a user on an article page, when they select a citation format (APA, MLA, Chicago, BibTeX, IEEE) and click the citation text, then the formatted citation is copied to the clipboard with a confirmation message.
+- **AC-FE-033**: Given a user on an article page with changelog entries, when the page loads, then a collapsed changelog table is displayed below the metadata; expanding it shows version history entries with date and description.
+- **AC-FE-034**: Given a user visiting `/socials`, when social links exist, then a list of social media links is fetched from `GET /socials` and each link opens in a new tab (`target="_blank"` with `rel="noopener noreferrer"`).
+- **AC-FE-035**: Given a user visiting `/others`, when items exist, then a list of external content items is displayed with title (linking to external URL), date, abstract, and category label.
+- **AC-FE-036**: Given a user navigating to a non-existent route, when the 404 page loads, then one of the 30 hardcoded humorous anecdotes is randomly displayed along with a link back to the home page.
+- **AC-FE-037**: Given the search bar on `/technical`, `/blog`, or `/others`, when the user types and exceeds 300 characters, then further input is prevented; pasting text exceeding 300 characters is truncated or rejected.
+- **AC-FE-038**: Given a backend request in progress, when the request is sent, then a loading bar is visible at the top of the page; when the request completes (success or failure), the loading bar disappears.
+- **AC-FE-039**: Given a backend error response with a mapped status (400, 403, 404, 405, 503, or unmapped status), when the error snackbar is displayed, then the message matches the mapping defined in FE-COMP-003 and the snackbar persists until manually dismissed.
+- **AC-FE-040**: Given a 504 backend response, when the error snackbar is displayed, then it includes "TJ has been notified about the server taking too long" plus one of the 10 randomized funny timeout messages from FE-COMP-003.
+- **AC-FE-041**: Given a user remaining on a page for 1 minute of active foreground time (measured via Page Visibility API), when the milestone is reached, then a `time_on_page` event with `milestone: "1min"` is sent to `POST /t`; the same applies for 2-minute and 5-minute milestones.
+- **AC-FE-042**: Given a user visiting `/technical`, `/blog`, or `/others`, when the category dropdown loads, then it is populated from `GET /categories` or from localStorage cache if the cached data is less than 24 hours old.
+- **AC-FE-043**: Given a user scrolling past 30% of an article on a 4g connection, when smart download triggers, then up to 3 related articles are prefetched in the background without exceeding the 50 MB storage cap.
+- **AC-FE-044**: Given a user clicking "Save for offline reading" on an article, when the button is clicked, then the article content is cached via the Cache API and metadata stored in IndexedDB; the offline availability indicator updates.
+- **AC-FE-045**: Given a cached article exists and the device is online, when the user visits the article, then the cached content is rendered immediately and a conditional request (`If-None-Match`/`If-Modified-Since`) is sent in the background to check for updates.
+- **AC-FE-046**: Given a search or filter query that returns an empty `items` array, when the result is displayed, then one of the randomized empty-result messages from FE-COMP-009 is shown instead of a blank list.
+- **AC-FE-047**: Given a URL with query parameters (e.g., `?q=test&category=devops&page=2`), when the page loads on `/technical`, `/blog`, or `/others`, then the search bar, filter controls, and pagination are initialized from those URL parameters (deep linking).

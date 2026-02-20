@@ -1,8 +1,8 @@
 ---
 title: Observability Specifications
-version: 3.5
+version: 3.6
 date_created: 2026-02-17
-last_updated: 2026-02-19
+last_updated: 2026-02-20
 owner: TJ Monserrat
 tags: [observability, logging, monitoring, tracking, vector-search, terraform, alerting, sli, slo, breadcrumbs]
 ---
@@ -569,3 +569,6 @@ Terraform operations (`terraform plan`, `terraform apply`) are observable throug
 - **AC-OBS-005**: Given the SLI/SLO (OBS-010), when the backend availability drops below 99.9% over the rolling 28-day window, then a fast-burn alert fires.
 - **AC-OBS-006**: Given the Looker Studio dashboard (OBS-006), when connected to BigQuery, then it displays unique visitors, page views, popular pages, referrer sources, and browser distribution from `frontend_tracking_logs`.
 - **AC-OBS-007**: Given the structured logging format, when any log entry is emitted by the Go backend, then it includes a `request_id` (UUID v4) for correlation.
+- **AC-OBS-008**: Given a backend request that completes successfully (no error), when the log entry is emitted, then the `server_breadcrumbs` field is NOT present in the log entry (breadcrumbs are logged only on ERROR-severity entries).
+- **AC-OBS-009**: Given any Cloud Function (INFRA-008a, 008c, 008d, INFRA-014), when it executes, then it emits structured JSON logs to stdout consistent with the logging requirements defined in OBS-001a (event type, level, and details per function).
+- **AC-OBS-010**: Given the Go backend application running in production, when custom metrics are exported, then Cloud Monitoring receives `api_requests_total`, `api_request_duration_ms`, `db_query_duration_ms`, `embedding_cache_hits_total`, `embedding_cache_misses_total`, `embedding_api_duration_ms`, `vector_search_duration_ms`, and `vector_search_candidates` metrics with their defined labels.

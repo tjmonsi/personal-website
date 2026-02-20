@@ -1,8 +1,8 @@
 ---
 title: Infrastructure Specifications
-version: 3.8
+version: 3.9
 date_created: 2026-02-17
-last_updated: 2026-02-19
+last_updated: 2026-02-20
 owner: TJ Monserrat
 tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac, artifact-registry, cloud-dns, pubsub]
 ---
@@ -1194,3 +1194,8 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
 - **AC-INFRA-012**: Given the Vertex AI Embedding API (INFRA-013), when called with a text input and `output_dimensionality=2048`, then it returns a 2048-dimensional L2-normalized embedding vector (CLR-131).
 - **AC-INFRA-013**: Given the `sync-article-embeddings` Cloud Function (INFRA-014), when triggered, then it reads articles from Firestore Enterprise, generates embeddings via Vertex AI for new/changed articles, and writes vectors to the corresponding Firestore Native collections (CLR-131).
 - **AC-INFRA-014**: Given the Artifact Registry repository (INFRA-018), when the CI/CD pipeline pushes a Docker image, then the image is stored at `asia-southeast1-docker.pkg.dev/<project-id>/website-images/` and Cloud Run can pull from it (CLR-131).
+- **AC-INFRA-015**: Given Cloud Logging (INFRA-007), when retention is configured, then the `_Default` log bucket retains logs for 90 days.
+- **AC-INFRA-016**: Given the `generate-sitemap` Cloud Function (INFRA-008a), when triggered by Cloud Scheduler, then it reads article collections from Firestore Enterprise, generates a valid sitemap XML, and writes it to the `sitemap` collection (DM-010).
+- **AC-INFRA-017**: Given the `process-rate-limit-logs` Cloud Function (INFRA-008c), when a Cloud Armor 429 log event is received via Pub/Sub (`rate-limit-events` topic), then it writes or updates an offense record in the `rate_limit_offenders` Firestore collection (DM-009).
+- **AC-INFRA-018**: Given the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d), when triggered by Cloud Scheduler, then it deletes expired offender records (no active ban, no offenses in last 90 days) from the `rate_limit_offenders` collection.
+- **AC-INFRA-019**: Given Cloud Scheduler jobs (INFRA-008b, 008e, 014b), when scheduled, then `trigger-sitemap-generation` runs every 6 hours, `trigger-cleanup-rate-limit-offenders` runs daily, and `trigger-sync-article-embeddings` runs daily at 04:00 UTC — all within the free tier of 3 jobs.
