@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 3.7
+version: 3.8
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -382,6 +382,7 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 5. **Apply filters**: Query Firestore Enterprise with the candidate document IDs from step 4 using a single MongoDB query. If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), apply them at the database level in the same query. WHEN `tag_match=any` (default), THE SYSTEM SHALL use `tags: { $in: [<tag values>] }`. WHEN `tag_match=all`, THE SYSTEM SHALL use `tags: { $all: [<tag values>] }`. Example: `{ _id: { $in: [...ids] }, category: "...", tags: { $in: [...] }, date_updated: { $gte: ..., $lt: ... } }`. If no filters, retrieve full documents from Firestore Enterprise by document IDs (`{ _id: { $in: [...ids] } }`). Filtering SHALL happen at the database level (not in application memory) to minimize data transfer.
 6. **Sort**: Sort results by cosine distance ascending (most similar first).
 7. **Paginate**: Apply frontend pagination (page number × page size of 10) to the filtered result set. Compute `total_items` and `total_pages` from the filtered set.
+8. **Post-filter exhaustion**: IF all candidate results from step 4 are filtered out in step 5 (i.e., no documents survive the category, tag, or date range filters), THE SYSTEM SHALL return `200` with an empty `items` array and `total_results: 0`. No retry with a larger K is attempted. This is the intended behavior — the vector search found semantically similar content, but none of it matched the active filters.
 
 > **Note**: WHEN `q` is present (with or without filters), THE SYSTEM SHALL always fetch up to 500 candidate document IDs from Firestore Native via `findNearest(limit: 500)`. The system then retrieves full documents from Firestore Enterprise by these IDs, applies any filters (category, tags, date range), and paginates the resulting set. `total_items` equals the number of candidates after filtering (capped at 500). This unified approach applies regardless of whether filters are present. (CLR-178)
 

@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 3.4
+version: 3.5
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -88,6 +88,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - WHEN the user scrolls to the bottom of the list, THE SYSTEM SHALL automatically fetch the next page of results.
   - THE SYSTEM SHALL display a loading indicator while fetching additional results.
   - THE SYSTEM SHALL stop fetching when all results have been loaded.
+  - **Deep link behavior with `?page=N`**: WHEN the page loads on a mobile viewport with a `page` query parameter present (e.g., `?page=5`), THE SYSTEM SHALL load page N as the starting point and allow downward infinite scroll from page N+1 onward. Upward scrolling SHALL fetch pages N-1, N-2, etc. until page 1 is reached. WHEN no `page` parameter is present, THE SYSTEM SHALL start from page 1 and infinite scroll continues from page 2 onward. Scrolling up when already at page 1 (or when no `page` parameter was present) SHALL trigger a full page refresh.
 - THE SYSTEM SHALL allow the user to tap/click a "Save for offline" action on each article in the list view.
 - **URL State Synchronization** (see FE-COMP-011):
   - THE SYSTEM SHALL reflect the current search and filter state in the browser URL query parameters.
@@ -191,7 +192,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 **Requirements**:
 
 - WHEN the user visits `/socials`, THE SYSTEM SHALL display a list of social media links fetched from `GET /socials`.
-- Each item SHALL display the platform name and a clickable link.
+- Each item SHALL display the platform name, a platform icon, and a clickable link.
+- THE SYSTEM SHALL use `@mdi/js` (Material Design Icons — tree-shakeable SVG module) to render platform icons. The `icon` field from the API response (e.g., `github`, `linkedin`) SHALL map to the corresponding MDI icon (e.g., `mdiGithub`, `mdiLinkedin`). IF the `icon` field is missing or does not map to a known MDI icon, THE SYSTEM SHALL display a generic link icon (`mdiOpenInNew`) as a fallback.
 - Links SHALL open in a new tab (`target="_blank"` with `rel="noopener noreferrer"`).
 
 ---
@@ -494,7 +496,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 **Requirements**:
 
-- WHEN a network error, JavaScript error, or slow loading occurs, THE SYSTEM SHALL send error data to the backend via `POST /t`.
+- WHEN a network error, JavaScript error, or slow loading (API response exceeding **3 seconds** — see OBS spec for authoritative threshold definition) occurs, THE SYSTEM SHALL send error data to the backend via `POST /t`.
 - THE SYSTEM SHALL use the same JWT body-based authentication mechanism as FE-COMP-004 (including the `token` field in each request body).
 - Error payload (JSON body, sent to the same `POST /t` endpoint with `action: "error_report"`) SHALL include:
   - `action`: `"error_report"`
@@ -957,3 +959,5 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-045**: Given a cached article exists and the device is online, when the user visits the article, then the cached content is rendered immediately and a conditional request (`If-None-Match`/`If-Modified-Since`) is sent in the background to check for updates.
 - **AC-FE-046**: Given a search or filter query that returns an empty `items` array, when the result is displayed, then one of the randomized empty-result messages from FE-COMP-009 is shown instead of a blank list.
 - **AC-FE-047**: Given a URL with query parameters (e.g., `?q=test&category=devops&page=2`), when the page loads on `/technical`, `/blog`, or `/others`, then the search bar, filter controls, and pagination are initialized from those URL parameters (deep linking).
+- **AC-FE-048**: Given a mobile viewport loading `/technical?page=5`, when the page loads, then page 5 results are displayed as the starting point; downward scroll fetches page 6+; upward scroll fetches pages 4, 3, 2, 1 sequentially. Scrolling up at page 1 triggers a full page refresh.
+- **AC-FE-049**: Given a user visiting `/socials`, when social links are displayed, then each item renders an MDI icon (`@mdi/js`) matching the `icon` field from the API response; items with unknown or missing `icon` values display a generic link icon (`mdiOpenInNew`).

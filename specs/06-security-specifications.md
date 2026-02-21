@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 3.9
+version: 4.0
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -172,6 +172,11 @@ The `process-rate-limit-logs` Cloud Function (INFRA-008c) SHALL use the followin
 **Ban response for 404** (90-day / indefinite block):
 
 Standard 404 response — indistinguishable from a normal "not found" to the client.
+
+**Manual Review of Indefinite Bans**:
+
+- To lift an indefinite ban, the site owner SHALL delete the corresponding document from the `rate_limit_offenders` collection (DM-009) in Firestore Enterprise. The Go backend's LRU cache will expire the stale "banned" entry within 60 seconds (the cache TTL), after which the IP will be unblocked.
+- No automated review process is provided. The site owner may periodically review indefinite bans by querying the `rate_limit_offenders` collection for documents where `current_ban.type = "indefinite"`. This is a manual operational task performed via the Firebase Console or a `mongosh` session against the Firestore Enterprise MongoDB-compatible endpoint.
 
 ---
 
@@ -581,3 +586,4 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - **AC-SEC-016**: Given the content CI/CD pipeline (SEC-010), when GitHub Actions authenticates to GCP, then Workload Identity Federation is used (no long-lived service account keys) and the WIF provider attribute condition restricts access to the specific content repository.
 - **AC-SEC-017**: Given the Cloud Run service account, when accessing Firestore Native (`vector-search` database), then it has only `roles/datastore.viewer` (read-only); write access to Firestore Native is restricted to the `sync-article-embeddings` Cloud Function SA.
 - **AC-SEC-018**: Given query parameters on any `GET` endpoint, when unknown or malformed parameters are present, then the backend returns HTTP `400` with a standard error response body.
+- **AC-SEC-019**: Given an indefinitely banned IP whose `rate_limit_offenders` document is deleted from Firestore, when the LRU cache TTL (60 seconds) expires, then the IP is unblocked and can access the site normally.
