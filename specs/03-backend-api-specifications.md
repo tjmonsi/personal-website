@@ -1,6 +1,6 @@
 ---
 title: Backend API Specifications
-version: 3.5
+version: 3.6
 date_created: 2026-02-17
 last_updated: 2026-02-20
 owner: TJ Monserrat
@@ -360,7 +360,7 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
    - **Cache hit**: Verify the cached entry's `model_version` matches the current model version. If it matches, use the cached embedding vector. If it does not match, treat as a cache miss (re-generate embedding and update the cache entry). (CLR-136)
    - **Cache miss**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_QUERY` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before storage. Store the UUID, normalized vector, and current `model_version` in the `embedding_cache` collection (no search string stored). No cache expiration.
 4. **Vector search**: Query the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors` — see DM-012) using the embedding vector with `findNearest()` (cosine distance). Exclude results with cosine distance > **0.35** (configurable threshold — see AD-020).
-5. **Apply filters**: If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), query Firestore Enterprise with the candidate document IDs from step 4 AND the filter criteria applied. If no filters, retrieve full documents from Firestore Enterprise by document IDs.
+5. **Apply filters**: Query Firestore Enterprise with the candidate document IDs from step 4 using a single MongoDB query. If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), apply them at the database level in the same query: `{ _id: { $in: [...ids] }, category: "...", tags: { $all: [...] }, ... }`. If no filters, retrieve full documents from Firestore Enterprise by document IDs (`{ _id: { $in: [...ids] } }`). Filtering SHALL happen at the database level (not in application memory) to minimize data transfer.
 6. **Sort**: Sort results by cosine distance ascending (most similar first).
 7. **Paginate**: Apply frontend pagination (page number × page size of 10) to the filtered result set. Compute `total_items` and `total_pages` from the filtered set.
 
@@ -873,6 +873,6 @@ See [06-security-specifications.md](06-security-specifications.md) for full rate
 - **AC-API-028**: Given a `GET /blog/{slug}.md` request with `If-None-Match` matching the current `ETag`, when the article has not changed, then the response returns `304 Not Modified` with no body.
 - **AC-API-029**: Given a valid `GET /socials` request, when social links exist, then the response returns `200` with `application/json` containing the list of social media entries.
 - **AC-API-030**: Given a valid `GET /others` request, when items exist, then the response returns `200` with `application/json` containing an `items` array and a `pagination` object (same format as `GET /technical`).
-- **AC-API-031**: Given a valid `GET /categories` request, when categories exist, then the response returns `200` with `application/json` containing the categories list and `Cache-Control: public, max-age=86400`.
+- **AC-API-031**: Given a valid `GET /categories` request, when categories exist, then the response returns `200` with `application/json` containing the categories list and `Cache-Control: public, max-age=3600`.
 - **AC-API-032**: Given a `GET /health` request, when the service is running, then the response returns `200` with `application/json` indicating the service is healthy.
 - **AC-API-033**: Given a `GET /robots.txt` request to `api.tjmonsi.com`, when processed, then the response returns `200` with `text/plain` containing `User-agent: *` and `Disallow: /`.

@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 3.6
+version: 3.7
 date_created: 2026-02-17
 last_updated: 2026-02-20
 owner: TJ Monserrat
@@ -435,8 +435,8 @@ The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (
 - Connection speed analysis
 - Link click analysis (most-clicked URLs, click-through rate per page)
 - Time-on-page engagement (percentage of visitors reaching 1 min, 2 min, 5 min milestones per page)
-- Content helpfulness score (derived from engagement milestones and link click depth)
-- Bot vs. human traffic discrimination (visitors with no `time_on_page` events, abnormal page view velocity)
+- Content helpfulness score (Looker Studio calculated metric based on engagement milestones and link click depth)
+- Bot vs. human traffic discrimination (Looker Studio calculated metric based on visitor page view velocity and engagement events)
 - Frontend error trends (frequency, types, affected pages)
 - Error-browser correlation
 - Backend error trends and masked 500 tracking

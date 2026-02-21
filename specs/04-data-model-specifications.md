@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 3.0
+version: 3.1
 date_created: 2026-02-17
 last_updated: 2026-02-19
 owner: TJ Monserrat
@@ -37,6 +37,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 
 **Constraints**:
 - Single document collection (only one front page).
+- The `frontpage` collection is populated by the content management CI/CD pipeline, similar to the `technical_articles` and `blog_articles` collections. The content pipeline is responsible for updating the `content` field of the single document in this collection to reflect changes to the homepage content.
 
 ---
 

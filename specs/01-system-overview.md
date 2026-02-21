@@ -1,8 +1,8 @@
 ---
 title: System Overview
-version: 3.4
+version: 3.5
 date_created: 2026-02-17
-last_updated: 2026-02-19
+last_updated: 2026-02-20
 owner: TJ Monserrat
 tags: [architecture, system-overview, infrastructure]
 ---
@@ -243,6 +243,26 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 ### Content Management
 
 Content (articles, front page, social links, external references) is managed through a **separate Git repository**. A CI/CD pipeline (GitHub Actions) in that repository processes markdown files and pushes structured content to the Firestore Enterprise database on merge. The pipeline authenticates to GCP via **Workload Identity Federation** (AD-022) — no long-lived service account keys. After pushing content, the pipeline invokes the `sync-article-embeddings` Cloud Function (INFRA-014) to synchronize embedding vectors. The content pipeline's implementation is out of scope for this project; only the integration contract is specified (see INFRA-014 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). The public-facing API remains read-only (`GET`-only, except `POST /t` for tracking).
+
+### Scope
+
+**In scope** (covered by these specifications):
+
+- Nuxt 4 project configuration (e.g., `nuxt.config.ts` settings for modules, build options, runtime config)
+- Go backend project structure (e.g., package organization, `main.go` setup, middleware chain)
+- Cloud Function code organization (e.g., file structure, function exports, shared utilities)
+- All GCP infrastructure as defined in specs 05 (Infrastructure) and 06 (Security)
+- Frontend SPA, backend API, and all supporting services
+
+**Covered in separate manuals** (in `/manuals/` directory):
+
+- Looker Studio dashboard layout (how metrics are organized, filters, visualizations)
+- Firebase Hosting custom domain setup (DNS records, SSL certificates, domain verification)
+
+**Out of scope** (not covered by these specifications):
+
+- Content management CI/CD pipeline (separate repository — AD-022)
+- Content authoring workflow and markdown formatting conventions
 
 ### Environments
 

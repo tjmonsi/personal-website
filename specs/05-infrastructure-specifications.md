@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 3.9
+version: 4.0
 date_created: 2026-02-17
 last_updated: 2026-02-20
 owner: TJ Monserrat
@@ -135,6 +135,7 @@ ENTRYPOINT ["/server"]
 - The Application CI/CD pipeline SHALL download the latest GeoLite2-Country database before the Docker build step, using a MaxMind license key stored in GitHub Actions secrets (secret name: `MAXMIND_LICENSE_KEY`).
 - Download URL: `https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz`
 - A **weekly scheduled GitHub Actions workflow** SHALL rebuild and redeploy the Docker image with the latest GeoLite2 database, even if no code changes have occurred. This ensures the GeoIP database is refreshed at least weekly.
+- The scheduled workflow SHALL use a cron schedule of `0 0 * * 0` (Sunday midnight UTC) in the GitHub Actions workflow file.
 - The scheduled workflow SHALL run independently of the main application CI/CD pipeline and SHALL follow the same build-test-deploy stages.
 
 **Container Security**:
@@ -237,6 +238,14 @@ ENTRYPOINT ["/server"]
 | Dev access       | Temporary access token for local development. See: https://docs.cloud.google.com/firestore/mongodb-compatibility/docs/connect#connect_with_a_temporary_access_token |
 | Backup           | Enabled (managed by Firestore Enterprise) |
 
+**Connection String Format** (Cloud Run):
+
+```
+mongodb+srv://cloud-run-api@<project-id>.iam@<database-id>.<region>.firestore.goog/?authMechanism=MONGODB-OIDC&readPreference=primary
+```
+
+Where `<project-id>` is the GCP project ID, `<database-id>` is the Firestore database name, and `<region>` is `asia-southeast1`.
+
 ---
 
 #### INFRA-007: Google Cloud Logging & Monitoring
@@ -330,6 +339,18 @@ ENTRYPOINT ["/server"]
 6. Write the generated XML to the `sitemap` Firestore collection (DM-010).
 7. The `GET /sitemap.xml` public endpoint reads from this collection (BE-API-011).
 
+**Sitemap URL Configuration**:
+
+Each `<url>` entry in the sitemap SHALL include:
+
+| URL Type | URL Pattern | `<priority>` | `<changefreq>` | `<lastmod>` |
+| -------- | ----------- | ------------ | --------------- | ----------- |
+| Homepage | `https://tjmonsi.com/` | `1.0` | `weekly` | Omit |
+| Article detail (technical) | `https://tjmonsi.com/technical/{slug}.md` | `0.8` | `weekly` | `date_updated` (ISO 8601) |
+| Article detail (blog) | `https://tjmonsi.com/blog/{slug}.md` | `0.8` | `weekly` | `date_updated` (ISO 8601) |
+| List pages (`/technical`, `/blog`) | `https://tjmonsi.com/technical`, `https://tjmonsi.com/blog` | `0.6` | `weekly` | Omit |
+| Static pages (`/socials`, `/others`, `/privacy`, `/changelog`) | `https://tjmonsi.com/socials`, etc. | `0.4` | `monthly` | Omit |
+
 ##### INFRA-008b: Cloud Scheduler — `trigger-sitemap-generation`
 
 **Configuration**:
@@ -390,10 +411,31 @@ ENTRYPOINT ["/server"]
 **Processing Logic**:
 
 1. Receive Cloud Armor log entry from Pub/Sub.
-2. Extract the client IP address from the log entry.
+2. Extract the client IP address from `httpRequest.remoteIp` and the request URL from `httpRequest.requestUrl` in the Cloud Logging log entry payload.
 3. Look up or create the offender record in the `rate_limit_offenders` collection (DM-009) by client IP.
-4. Use MongoDB `findOneAndUpdate` with `returnDocument: "after"` to atomically increment `offense_count` (via `$inc`) and append to `offense_history` (via `$push`), returning the updated document. This ensures the ban evaluation in step 5 uses the post-increment document state, eliminating race conditions when multiple Cloud Function instances process concurrent Pub/Sub events for the same IP. (CLR-163, CLR-197)
-5. Using the returned post-increment document, evaluate progressive banning thresholds (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)):
+4. Use MongoDB `findOneAndUpdate` with `returnDocument: "after"` to atomically increment `offense_count` (via `$inc`) and append to `offense_history` (via `$push`), with `$setOnInsert` for new documents, and `upsert: true`. Returns the updated document. This ensures the ban evaluation in step 5 uses the post-increment document state, eliminating race conditions when multiple Cloud Function instances process concurrent Pub/Sub events for the same IP. (CLR-163, CLR-197)
+
+   ```javascript
+   db.rate_limit_offenders.findOneAndUpdate(
+     { identifier: clientIP },
+     {
+       $inc: { offense_count: 1 },
+       $push: {
+         offense_history: {
+           timestamp: new Date(),
+           endpoint: extractedEndpoint
+         }
+       },
+       $setOnInsert: {
+         identifier: clientIP,
+         ban_history: []
+       }
+     },
+     { upsert: true, returnDocument: 'after' }
+   )
+   ```
+
+5. Using the returned post-increment document, evaluate progressive banning thresholds using the rolling 7-day window algorithm (see SEC-002 in [06-security-specifications.md](06-security-specifications.md)):
    - 5 offenses within 7 days → set 30-day ban.
    - 2 offenses within 7 days after 30-day ban expires → set 90-day ban.
    - 2 offenses within 7 days after 90-day ban expires → set indefinite ban.

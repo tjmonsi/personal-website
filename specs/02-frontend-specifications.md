@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 3.2
+version: 3.3
 date_created: 2026-02-17
 last_updated: 2026-02-20
 owner: TJ Monserrat
@@ -129,7 +129,13 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - In markdown, article images SHALL use the format: `![alt text](https://api.tjmonsi.com/images/path/to/image.png)`.
   - The frontend CSP `img-src` directive restricts image loading to `'self' data: https://api.tjmonsi.com` (SEC-005).
 - **Heading Anchors**:
-  - THE SYSTEM SHALL generate an `id` attribute for each rendered heading (H2, H3, H4) using a heading slug derived from the heading text (lowercase, spaces replaced with hyphens, special characters removed).
+  - THE SYSTEM SHALL generate an `id` attribute for each rendered heading (H2, H3, H4) using a heading slug derived from the heading text with the following algorithm:
+    1. Convert to lowercase
+    2. Replace spaces and underscores with hyphens
+    3. Remove all characters that are not `[a-z0-9-]`
+    4. Collapse consecutive hyphens to a single hyphen
+    5. Strip leading and trailing hyphens
+    6. If the result is empty, use a fallback of `heading-N` where N is the heading's sequential position (1-indexed) among all headings in the article
   - IF duplicate heading slugs exist within the same article, THE SYSTEM SHALL append a numeric suffix (e.g., `my-heading`, `my-heading-1`, `my-heading-2`).
   - Each heading SHALL display a link icon button (e.g., a chain-link icon) on hover or focus.
   - WHEN the user clicks the heading link icon, THE SYSTEM SHALL copy the full URL with the hash fragment (e.g., `https://tjmonsi.com/technical/slug.md#heading-slug`) to the clipboard.
@@ -146,7 +152,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
     - **APA**: `Monserrat, T.J. (2025). Article Title. tjmonsi.com. https://tjmonsi.com/technical/slug.md`
     - **MLA**: `Monserrat, T.J. "Article Title." tjmonsi.com, 15 Jan. 2025, https://tjmonsi.com/technical/slug.md.` (CLR-202)
     - **Chicago**: `Monserrat, T.J. "Article Title." tjmonsi.com. January 15, 2025. https://tjmonsi.com/technical/slug.md.` (CLR-202)
-    - **BibTeX**: BibTeX entry for academic use
+    - **BibTeX**: BibTeX entry for academic use. The citation key SHALL follow the format: `<author-lastname-lowercase><year><title-first-three-words-lowercased-no-spaces>`. For example, an article titled "My First Article" published in 2025 → `monserrat2025myfirstarticle`. If the title has fewer than 3 words, use all available words. Special characters SHALL be removed from the key.
     - **IEEE**: `[N] T.J. Monserrat, "Article Title," tjmonsi.com, Jan. 15, 2025. [Online]. Available: https://tjmonsi.com/technical/slug.md`
   - WHEN the user clicks the citation text, THE SYSTEM SHALL copy the selected citation format to the clipboard.
   - THE SYSTEM SHALL display a confirmation message (e.g., "Citation copied to clipboard") after copying.
@@ -307,13 +313,41 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 - WHEN the user visits `/changelog`, THE SYSTEM SHALL display a chronological list of frontend-only changes (most recent first).
 - THE SYSTEM SHALL hardcode the changelog content in the frontend (no backend endpoint needed).
-- THE SYSTEM SHALL display a **TL;DR section** at the top of the changelog page, before the detailed entries. The TL;DR SHALL summarize the most important recent changes in a way that's easy to understand at a glance (e.g., "Latest: Dark mode support, faster search, and a new socials page layout."). (Additional Note, Batch 0014)
+- THE SYSTEM SHALL display a **TL;DR section** at the top of the changelog page, before the detailed entries. The TL;DR SHALL summarize the most important recent changes in a way that's easy to understand at a glance (e.g., "Latest: Offline reading, improved error reporting, and funnier 404 pages."). (Additional Note, Batch 0014)
 - Each changelog entry SHALL include:
   - A version identifier or date
   - A brief description of changes
 - THE SYSTEM SHALL display a "Last updated" date at the top of the page.
 
 > **Note**: The `/changelog` page is a static view rendered from a local markdown file bundled with the SPA (no API fetch required). (CLR-187)
+
+---
+
+### Visual Design — Light and Dark Mode
+
+**Font**: Google Sans (served from Google Fonts CDN).
+
+**Design Philosophy**: Minimalistic, clean, and focused on readability and ease of navigation. Subtle shadows and borders SHALL create visual separation between elements without adding visual noise.
+
+**Light Mode** (default):
+
+| Element            | Value                          |
+| ------------------ | ------------------------------ |
+| Background         | White (`#FFFFFF`)              |
+| Text               | Black / near-black (`#1A1A1A`)|
+| Accent (links, buttons) | Blue (`#1A73E8`)         |
+| Borders / shadows  | Subtle light gray             |
+
+**Dark Mode**:
+
+| Element            | Value                          |
+| ------------------ | ------------------------------ |
+| Background         | Dark gray (`#1E1E1E`)         |
+| Text               | White / near-white (`#E8E8E8`)|
+| Accent (links, buttons) | Blue (`#8AB4F8`)         |
+| Borders / shadows  | Subtle dark gray              |
+
+**Mode Detection**: THE SYSTEM SHALL default to the user's OS preference via `prefers-color-scheme` media query. THE SYSTEM SHALL provide a manual toggle in the site header (FE-COMP-012) to override the OS preference. The user's choice SHALL be persisted in `localStorage` (key: `theme_preference`, values: `light`, `dark`, or `auto`).
 
 ---
 
@@ -413,7 +447,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - `visitor_session_id`: The session-scoped UUID v4 from `sessionStorage`
   - `page`: Current page URL path
   - `referrer`: Referrer URL (if available)
-  - `browser`: Browser name and version (from User-Agent, determined client-side)
+  - `browser`: Browser name and major version, determined client-side. THE SYSTEM SHALL use the `navigator.userAgentData` API (User-Agent Client Hints) when available, falling back to User-Agent string parsing (`navigator.userAgent`) for browsers that do not support Client Hints. Format: `"<Browser> <Major Version>"` (e.g., `"Chrome 120"`, `"Firefox 115"`, `"Safari 17"`). A lightweight regex or the `navigator.userAgentData.brands` array SHALL be used — no heavy UA parsing library is required.
   - `connection_speed`: Connection speed info from Navigator.connection API (if available). The frontend SHALL convert the browser API's camelCase field names (e.g., `effectiveType`) to snake_case (e.g., `effective_type`) before sending to maintain consistency with the backend's snake_case convention (CLR-130). THE SYSTEM SHALL extract only the following keys from `navigator.connection` and convert to snake_case: `effectiveType` → `effective_type`, `downlink` → `downlink`, `rtt` → `rtt`. Other properties SHALL NOT be sent. (CLR-142)
   - Note: `connection_speed` relies on the Network Information API (`navigator.connection.effectiveType`), which is not supported in all browsers (notably Safari/Firefox). WHEN the Network Information API is unavailable (e.g., Safari, Firefox), THE SYSTEM SHALL omit the `connection_speed` field entirely from the tracking payload. The field is optional; the backend and BigQuery pipeline handle its absence gracefully. (CLR-176)
 - IP address and server-side timestamp are determined by the backend from request headers.
@@ -671,6 +705,10 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - THE SYSTEM SHALL use the following concrete parameters for smart download behavior: (CLR-158)
     - **Scroll depth trigger**: WHEN the user has scrolled past **30%** of the current article's height, THE SYSTEM SHALL begin prefetching.
     - **Prefetch count**: THE SYSTEM SHALL prefetch up to **3** articles per trigger (based on heuristic ranking).
+    - **Article Selection Algorithm**: THE SYSTEM SHALL select articles to prefetch using the following algorithm:
+      1. From the currently loaded list page data, select uncached articles matching the current article's category.
+      2. If fewer than 3 category-matching articles are available, fill remaining slots with the most recent uncached articles from the current list (sorted by `date_updated` descending).
+      3. Only articles whose data is already available in the currently loaded list page response SHALL be considered — no extra API calls SHALL be made for smart download selection.
     - **Storage cap**: THE SYSTEM SHALL limit smart-download cached content to **50 MB** per session. WHEN the cap is reached, the oldest cached articles SHALL be evicted before new ones are stored.
     - **Network condition**: THE SYSTEM SHALL only prefetch when `navigator.connection.effectiveType === '4g'` (proxy for high-bandwidth connections). WHEN the Network Information API is unavailable (Safari/Firefox), smart download prefetching SHALL be disabled. (CLR-177)
 - **Manual Save**:
@@ -679,8 +717,9 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - In list views (FE-PAGE-002, FE-PAGE-004), each article item SHALL display an indicator showing whether the article is available for offline reading.
   - The offline indicator SHALL display a cloud-off icon (e.g., `mdi-cloud-off-outline` or equivalent) when the device is offline, and a cloud-check icon when cached content is being served. (CLR-169)
 - **Storage**:
-  - **Cache API**: THE SYSTEM SHALL use the Cache API (via service worker) to cache article content HTTP responses. This enables fast retrieval of full article content when offline or on repeat visits.
-  - **IndexedDB**: THE SYSTEM SHALL use IndexedDB to store article metadata (title, slug, category, tags, dates, abstract), reading state (e.g., reading progress, last accessed timestamp), and article content as structured data for quick retrieval without requiring a network request via the Cache API.
+  - **Cache API** (via service worker): THE SYSTEM SHALL use the Cache API to cache full HTTP responses for article detail endpoints (`GET /technical/{slug}.md` and `GET /blog/{slug}.md`). The service worker intercepts network requests and serves from Cache API when offline. This is the **primary retrieval mechanism** for offline content.
+  - **IndexedDB** (from main thread): THE SYSTEM SHALL use IndexedDB to store article metadata (title, slug, category, tags, dates, abstract), reading progress state (scroll percentage — see Reading Progress below), and last-accessed timestamps. IndexedDB SHALL **NOT** duplicate full article content — it serves as a fast lookup index for the offline availability indicator and reading state.
+  - **Source of truth** for "is this article available offline?": `caches.match(articleURL)` against the Cache API. IndexedDB is used for metadata display only.
   - THE SYSTEM SHALL manage storage limits gracefully, removing the oldest cached articles when storage is full.
 - **Offline Retrieval Strategy (Cache-First with Conditional Requests)**:
   - WHEN navigating to a URL, THE SYSTEM SHALL first check if cached content exists (Cache API for content responses, IndexedDB for metadata).
@@ -694,6 +733,13 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 **Service Worker Lifecycle** (CLR-170):
 
 - THE SYSTEM SHALL use a "stale-while-revalidate" strategy for the service worker lifecycle. When a new service worker version is available, the system SHALL notify the user via a non-intrusive toast ("New version available — refresh to update") and activate the new worker on the next navigation or manual refresh. The system SHALL NOT force-activate a new service worker while the user is actively browsing to avoid disrupting the experience.
+
+**Service Worker ↔ Main Thread Communication**:
+
+- THE SYSTEM SHALL use `postMessage` as the communication channel between the service worker and the main thread (Vue application), following standard Workbox patterns.
+- **New version detection**: The service worker SHALL send a `postMessage` to the main thread when a new version enters the `waiting` state. The main thread listens via `navigator.serviceWorker.addEventListener('message', ...)`.
+- **"Refresh now" button flow**: WHEN the user clicks "Refresh now" in the update snackbar, the main thread SHALL send a `{ type: 'SKIP_WAITING' }` message to the waiting service worker. The service worker SHALL call `self.skipWaiting()` upon receiving this message. The main thread SHALL listen for the `controllerchange` event on `navigator.serviceWorker` and trigger a page reload when the new service worker takes control.
+- **Cache requests from main thread**: WHEN the user clicks "Save for offline reading", the main thread SHALL send a `postMessage` to the active service worker with the article URL to cache. The service worker SHALL fetch and store the response in the Cache API.
 
 **Service Worker Update Notification**:
 
@@ -716,6 +762,21 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - The update snackbar SHALL auto-dismiss after **20 seconds** if the user does not interact with it. This is longer than the standard 5-second informational toast duration (FE-COMP-003) to give the user time to read the update information.
 - IF the user dismisses the snackbar without refreshing, the new service worker SHALL be activated on the next full page load or navigation.
 
+**Reading Progress Tracking**:
+
+- THE SYSTEM SHALL track reading progress for articles as a scroll position percentage (0–100%).
+- THE SYSTEM SHALL save reading progress to IndexedDB (keyed by article slug) in two ways:
+  - **On scroll**: Throttled to once every **5 seconds** during scroll events to avoid excessive writes.
+  - **On page leave**: Saved on the `beforeunload` event and on SPA route change (`beforeRouteLeave`).
+- THE SYSTEM SHALL restore reading progress when a user returns to a previously read article and offer to scroll to the saved position.
+- **List View Display**: In list views (FE-PAGE-002, FE-PAGE-004), each article item that has reading progress stored in IndexedDB SHALL display a small badge (e.g., "45% read") indicating how far the user has read. Articles with 100% progress SHALL display a "Read" badge instead.
+
+**Offline Availability Indicator — Cache Check Mechanism**:
+
+- WHEN a list page (FE-PAGE-002, FE-PAGE-004) loads, THE SYSTEM SHALL check `caches.match()` for each article URL in the visible list to determine offline availability.
+- THE SYSTEM SHALL use `Promise.all` to perform these cache checks in parallel for all visible list items.
+- WHEN a smart download prefetch or manual save completes, THE SYSTEM SHALL dispatch a custom event (e.g., `offline-cache-updated`) that triggers a re-check of visible list items to update their offline availability indicators in real time.
+
 ---
 
 #### FE-COMP-009: Empty Search Results Handling
@@ -736,7 +797,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - "You stumped me. Try a different search?"
 - **Repeated Empty Search Detection**:
   - THE SYSTEM SHALL track consecutive empty search results in the current session (frontend-only, no server call).
-  - THE SYSTEM SHALL detect duplicate search requests using the full request signature: `q` + `category` + `tags` + `tag_match` + `date_from` + `date_to`. Two requests are considered duplicates when their `q` values match (exact string match or Levenshtein distance ≤ 2) AND all filter parameters are identical. Duplicate requests SHALL return cached results instead of making a new API call. (CLR-165, CLR-179)
+  - THE SYSTEM SHALL detect duplicate search requests using the full request signature: `q` + `category` + `tags` + `tag_match` + `date_from` + `date_to`. Two requests are considered duplicates when their `q` values match (exact string match or standard Levenshtein distance ≤ 2 on the lowercased, trimmed query string — not Damerau-Levenshtein) AND all filter parameters are identical. Duplicate requests SHALL return cached results instead of making a new API call. (CLR-165, CLR-179)
   - IF the user submits a search that returns the same empty result (matching the "similar" query criteria above), THE SYSTEM SHALL escalate the message to a more humorous tone. Examples:
     - "What are you trying to find? I genuinely want to help."
     - "Try and try again, but the results won't change."
@@ -782,6 +843,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - THE SYSTEM SHALL encode parameter values using standard URL encoding (`encodeURIComponent`).
   - THE SYSTEM SHALL omit default values from the URL to keep URLs clean:
     - Empty `q` (no search) → omit `q`
+    - WHEN the search bar value is empty or contains only whitespace, THE SYSTEM SHALL strip whitespace before evaluating and SHALL remove the `q` parameter from the URL (treat as no active search).
     - No `category` selected → omit `category`
     - No `tags` selected → omit `tags`
     - `tag_match=any` (default) → omit `tag_match`
@@ -827,7 +889,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 - THE SYSTEM SHALL be responsive and functional on desktop, tablet, and mobile viewports.
 - Site header navigation (FE-COMP-012) SHALL collapse to a hamburger menu with a left-sliding navigation drawer on mobile.
-- Table of contents (FE-PAGE-003, FE-PAGE-005) SHALL collapse to a hamburger/dropdown on mobile.
+- Table of contents (FE-PAGE-003, FE-PAGE-005) SHALL collapse to a floating button positioned at the bottom-right of the viewport on mobile. WHEN the user taps the floating button, THE SYSTEM SHALL display a slide-up sheet containing the heading list. Scroll spy SHALL continue to visually highlight the currently active heading within the sheet. WHEN the user taps a heading in the sheet, THE SYSTEM SHALL scroll to that heading and close the sheet.
 - Search bars and filters SHALL stack vertically on mobile.
 
 ### Accessibility

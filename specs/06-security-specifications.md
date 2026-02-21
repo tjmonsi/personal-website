@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 3.7
+version: 3.8
 date_created: 2026-02-17
 last_updated: 2026-02-20
 owner: TJ Monserrat
@@ -78,7 +78,7 @@ tags: [security, rate-limiting, cors, authentication, vector-search, terraform, 
 
 - **Real-time rate counting**: Enforced by **Google Cloud Armor** at the load balancer level (see INFRA-005 in [05-infrastructure-specifications.md](05-infrastructure-specifications.md)). Cloud Armor handles per-IP request counting and throttling. This avoids the need for in-memory rate counters in the Go application, which would be lost when Cloud Run instances scale down or restart.
 - **Offense tracking via log sink**: A **Cloud Logging log sink** routes Cloud Armor rate-limit (429) events to a **Cloud Function** (`process-rate-limit-logs`, INFRA-008c). The Cloud Function writes offense records to the `rate_limit_offenders` Firestore collection (DM-009). This bridges the gap between Cloud Armor (which blocks requests before they reach Cloud Run) and the application's progressive banning logic.
-- **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The Go application checks ban status on each `GET` and `POST` request and enforces progressive banning tiers. `OPTIONS` preflight requests are exempt from ban checks (consistent with rate-limiting exemption) to avoid CORS preflight failures for banned clients.
+- **Progressive banning state**: Stored in **Firestore** (`rate_limit_offenders` collection, DM-009). The `process-rate-limit-logs` Cloud Function (INFRA-008c) evaluates offense counts against progressive ban tier thresholds and writes the `current_ban` field when a ban threshold is met. The Go application reads the `current_ban` field on each `GET` and `POST` request and enforces the appropriate response code (429, 403, or 404). The Go application does NOT evaluate ban tiers or write ban state — it is a read-only ban checker. `OPTIONS` preflight requests are exempt from ban checks (consistent with rate-limiting exemption) to avoid CORS preflight failures for banned clients.
 - **Ban status caching**: The Go application SHALL maintain a short-lived **in-memory LRU cache** for ban status lookups to reduce Firestore reads. Cache parameters: **60-second TTL**, **maximum 1000 entries**, keyed by client IP. On cache miss, the application reads from Firestore and populates the cache. A newly applied ban may take up to 60 seconds to take effect for already-cached "not banned" IPs. This trade-off is acceptable given the progressive banning model where bans are applied after multiple offenses. (CLR-196)
 - **Adaptive protection**: **Cloud Armor Adaptive Protection** is enabled to provide ML-based DDoS detection with recommended rules that the owner can review and apply, complementing the application-level progressive banning (see INFRA-005).
 - This multi-layer approach ensures rate limiting works correctly across Cloud Run auto-scaling events while keeping the infrastructure simple (no Redis/Memorystore needed).
@@ -129,6 +129,17 @@ WHEN a client exceeds the rate limit, THE SYSTEM SHALL track it as an "offense."
 | 5 offenses within 7 days                          | Block for 30 days           | `403`         |
 | 2 offenses within 7 days after 30-day ban expires | Block for 90 days           | `404`         |
 | 2 offenses within 7 days after 90-day ban expires | Block indefinitely          | `404`         |
+
+**Offense Counting Algorithm — Rolling 7-Day Window**:
+
+The `process-rate-limit-logs` Cloud Function (INFRA-008c) SHALL use the following algorithm when evaluating progressive ban tiers after each offense increment:
+
+1. **Rolling window**: Count only offenses with timestamps within the last 7 days from the current offense timestamp. Offenses older than 7 days are excluded from tier evaluation.
+2. **Initial ban evaluation**: If the offender has no `current_ban` (or `current_ban` is null), count offenses in the rolling 7-day window. If the count reaches 5, apply a 30-day ban.
+3. **Post-ban escalation**: After any ban expires (ban `end` date is in the past), the "post-ban offense window" starts from `current_ban.end`. Count only offenses with timestamps after `current_ban.end` and within the rolling 7-day window.
+   - After a 30-day ban expires: 2 offenses within 7 days of each other (both after ban expiry) → 90-day ban.
+   - After a 90-day ban expires: 2 offenses within 7 days of each other (both after ban expiry) → indefinite ban.
+4. **Active ban**: If `current_ban` is active (not expired), no tier evaluation is needed — the existing ban is still in effect. The offense is still recorded (step 4 in INFRA-008c processing logic) for historical tracking.
 
 **Blocking behavior**:
 
