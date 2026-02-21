@@ -57,7 +57,7 @@ This creates an internal inconsistency within spec 01 itself.
 - (A) Update all 3 locations: AD-016 → "6 dedicated log sinks", Definitions → "Six sinks route logs to dedicated tables", SEC-007 Data Retention Summary → add row: `BigQuery cloud_functions_error_logs | Cloud Functions error logs | 2 years | BigQuery table expiry`.
 
 **Answer**
-
+Update all 3 locations: AD-016 → "6 dedicated log sinks", Definitions → "Six sinks route logs to dedicated tables", SEC-007 Data Retention Summary → add row: `BigQuery cloud_functions_error_logs | Cloud Functions error logs | 2 years | BigQuery table expiry`.
 
 ---
 
@@ -88,7 +88,7 @@ This creates an internal inconsistency within spec 01 itself.
   Update `roles/compute.networkAdmin` purpose to: "Manage VPC, subnets, load balancer resources (INFRA-004, INFRA-009)"
 
 **Answer**
-
+Do suggested Fix
 
 ---
 
@@ -118,7 +118,7 @@ The 4 Gen 2 Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014) are NOT Firebase
 - (C) Use Terraform for code deployment: Remove `lifecycle { ignore_changes }` on the source field. Let Terraform manage both infrastructure and code for these 4 functions.
 
 **Answer**
-
+(A) Expand INFRA-020: Add a deploy step for Gen 2 functions via `gcloud functions deploy`. Broaden app-deployer SA `roles/cloudfunctions.developer` scope to project-level (covering all 5 functions: `server` + 4 Gen 2). Add lint/test steps for Cloud Functions Node.js code.
 
 ---
 

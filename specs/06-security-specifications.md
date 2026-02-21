@@ -1,8 +1,8 @@
 ---
 title: Security Specifications
-version: 4.2
+version: 4.4
 date_created: 2026-02-17
-last_updated: 2026-02-21
+last_updated: 2026-02-22
 owner: TJ Monserrat
 tags: [security, rate-limiting, cors, authentication, vector-search, terraform, iac, wif, service-accounts]
 ---
@@ -354,6 +354,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | BigQuery `frontend_tracking_logs`   | Visitor tracking logs              | 2 years          | BigQuery table expiry |
 | BigQuery `frontend_error_logs`      | Frontend error logs                | 2 years          | BigQuery table expiry |
 | BigQuery `backend_error_logs`       | Backend error logs                 | 2 years          | BigQuery table expiry |
+| BigQuery `cloud_functions_error_logs` | Cloud Functions error logs       | 2 years          | BigQuery table expiry |
 | Firestore `rate_limit_offenders` (DM-009) | Rate limit offender records  | 90 days (no active ban) | Scheduled cleanup |
 | Firestore `embedding_cache` (DM-011) | Search query embeddings (no query text stored) | No expiration | Manual purge (DM-011 procedure) (CLR-143) |
 
@@ -491,15 +492,19 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | Role                                | Scope     | Purpose                                           |
 | ----------------------------------- | --------- | ------------------------------------------------- |
-| `roles/storage.objectAdmin`         | Terraform state bucket (INFRA-015) | Read/write Terraform state and lock files |
+| `roles/storage.objectAdmin`         | Project   | Read/write Terraform state and lock files (INFRA-015) and manage Cloud Storage media bucket (INFRA-019) |
 | `roles/run.admin`                   | Project   | Manage Cloud Run services (INFRA-003)             |
 | `roles/cloudfunctions.admin`        | Project   | Manage Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014) |
-| `roles/compute.networkAdmin`        | Project   | Manage VPC, subnets, firewall rules (INFRA-009)   |
+| `roles/compute.networkAdmin`        | Project   | Manage VPC, subnets, load balancer resources (INFRA-004, INFRA-009) |
+| `roles/compute.securityAdmin`       | Project   | Manage Cloud Armor security policies (INFRA-005), VPC firewall rules (INFRA-009), Google-managed SSL certificates (INFRA-004) |
+| `roles/cloudscheduler.admin`        | Project   | Manage Cloud Scheduler jobs (INFRA-008b, 008e, 014b) |
+| `roles/firebasehosting.admin`       | Project   | Create Firebase Hosting site resource (INFRA-001) |
 | `roles/dns.admin`                   | Project   | Manage Cloud DNS zones and records (INFRA-017)    |
 | `roles/artifactregistry.admin`      | Project   | Manage Artifact Registry repositories (INFRA-018) |
 | `roles/logging.admin`               | Project   | Manage log sinks, log buckets (INFRA-007, INFRA-010) |
 | `roles/monitoring.admin`            | Project   | Manage alerting policies, dashboards (OBS-005, OBS-006) |
 | `roles/iam.serviceAccountAdmin`     | Project   | Manage service accounts (SEC-013)                 |
+| `roles/iam.workloadIdentityPoolAdmin` | Project | Manage Workload Identity Federation pools and providers (SEC-010) |
 | `roles/pubsub.admin`               | Project   | Manage Pub/Sub topics and subscriptions (INFRA-008c) |
 | `roles/bigquery.admin`             | Project   | Manage BigQuery datasets and log sinks (INFRA-010) |
 | `roles/datastore.user`             | Project   | Manage Firestore Enterprise and Native databases (INFRA-006, INFRA-012) |
@@ -541,16 +546,16 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 
 | # | Service Account Email | Name | Purpose | Key IAM Roles | Scope | Managed By |
 |---|----------------------|------|---------|---------------|-------|------------|
-| 1 | `cloud-run-api@<project-id>.iam.gserviceaccount.com` | Cloud Run API SA | Identity for the Go backend API (INFRA-003) | `roles/datastore.viewer` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI), `roles/storage.objectViewer` (media bucket `<project-id>-media-bucket`, INFRA-019), `roles/datastore.user` (Firestore Enterprise, MongoDB wire protocol auth via IAM — CLR-148) | Project / specific resources | Terraform |
+| 1 | `cloud-run-api@<project-id>.iam.gserviceaccount.com` | Cloud Run API SA | Identity for the Go backend API (INFRA-003) | `roles/datastore.viewer` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI), `roles/storage.objectViewer` (media bucket `<project-id>-media-bucket`, INFRA-019), `roles/datastore.user` (Firestore Enterprise, MongoDB wire protocol auth via IAM — CLR-148), `roles/monitoring.metricWriter` (Cloud Monitoring — export 10 custom metrics, OBS-004) | Project / specific resources | Terraform |
 | 2 | `cf-sitemap-gen@<project-id>.iam.gserviceaccount.com` | Sitemap Generator SA | Identity for the `generate-sitemap` Cloud Function (INFRA-008a) | `roles/datastore.user` (Firestore Enterprise — read `technical_articles`, `blog_articles`; read/write `sitemap`) (CLR-185) | INFRA-008a function | Terraform |
 | 3 | `cf-rate-limit-proc@<project-id>.iam.gserviceaccount.com` | Rate Limit Log Processor SA | Identity for the `process-rate-limit-logs` Cloud Function (INFRA-008c) | `roles/datastore.user` (Firestore Enterprise — read/write `rate_limit_offenders`) (CLR-185) | INFRA-008c function | Terraform |
 | 4 | `cf-offender-cleanup@<project-id>.iam.gserviceaccount.com` | Offender Cleanup SA | Identity for the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d) | `roles/datastore.user` (Firestore Enterprise — read/write `rate_limit_offenders`) (CLR-185) | INFRA-008d function | Terraform |
 | 5 | `cf-embed-sync@<project-id>.iam.gserviceaccount.com` | Embedding Sync SA | Identity for the `sync-article-embeddings` Cloud Function (INFRA-014) | `roles/datastore.viewer` (Firestore Enterprise — read `technical_articles`, `blog_articles`, `others`), `roles/datastore.user` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI) | INFRA-014 function | Terraform |
 | 6 | `content-cicd@<project-id>.iam.gserviceaccount.com` | Content CI/CD SA | WIF-mapped SA for content repository GitHub Actions (SEC-010). Used only for invoking the embedding sync function — Firestore Enterprise write access for content publishing uses separate credentials provisioned in the content pipeline project (out of scope). | `roles/cloudfunctions.invoker`, `roles/run.invoker` on `sync-article-embeddings` | INFRA-014 function | Terraform |
-| 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (state bucket), `roles/run.admin`, `roles/cloudfunctions.admin`, `roles/compute.networkAdmin`, `roles/dns.admin`, `roles/artifactregistry.admin`, `roles/logging.admin`, `roles/monitoring.admin`, `roles/iam.serviceAccountAdmin`, `roles/pubsub.admin`, `roles/bigquery.admin`, `roles/datastore.user` (CLR-149) | Project | **Manual** (bootstrap) |
+| 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (project), `roles/run.admin`, `roles/cloudfunctions.admin`, `roles/compute.networkAdmin`, `roles/compute.securityAdmin`, `roles/cloudscheduler.admin`, `roles/firebasehosting.admin`, `roles/dns.admin`, `roles/artifactregistry.admin`, `roles/logging.admin`, `roles/monitoring.admin`, `roles/iam.serviceAccountAdmin`, `roles/iam.workloadIdentityPoolAdmin`, `roles/pubsub.admin`, `roles/bigquery.admin`, `roles/datastore.user` (CLR-149) | Project | **Manual** (bootstrap) |
 | 8 | `looker-studio-reader@<project-id>.iam.gserviceaccount.com` | Looker Studio Reader SA | Read-only BigQuery access for Looker Studio dashboards (SEC-009, INFRA-011) | `roles/bigquery.dataViewer` (dataset), `roles/bigquery.jobUser` (project) | `website_logs` dataset + project | Terraform |
 | 9 | `cloud-scheduler-invoker@<project-id>.iam.gserviceaccount.com` | Cloud Scheduler Invoker SA | OIDC token issuer for Cloud Scheduler jobs (INFRA-008b, 008e, 014b) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on target Cloud Functions | Target functions | Terraform |
-| 10 | `app-deployer@<project-id>.iam.gserviceaccount.com` | App Deployer SA | WIF-mapped SA for application CI/CD pipeline (SEC-014, INFRA-020). Deploys frontend to Firebase Hosting/Functions and backend to Cloud Run via Artifact Registry. | `roles/artifactregistry.writer` (Artifact Registry), `roles/run.developer` (Cloud Run), `roles/firebasehosting.admin` (Firebase Hosting), `roles/cloudfunctions.developer` (Firebase Functions) | Project / specific resources | Terraform |
+| 10 | `app-deployer@<project-id>.iam.gserviceaccount.com` | App Deployer SA | WIF-mapped SA for application CI/CD pipeline (SEC-014, INFRA-020). Deploys frontend to Firebase Hosting/Functions, backend to Cloud Run via Artifact Registry, and Gen 2 Cloud Functions. | `roles/artifactregistry.writer` (Artifact Registry), `roles/run.developer` (Cloud Run), `roles/firebasehosting.admin` (Firebase Hosting), `roles/cloudfunctions.developer` (all Cloud Functions — `server` + 4 Gen 2) | Project | Terraform |
 
 **Security Constraints**:
 
@@ -582,7 +587,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | `roles/artifactregistry.writer`     | Artifact Registry repository (INFRA-018) | Push Docker images for backend deployment |
 | `roles/run.developer`               | Cloud Run service (INFRA-003) | Deploy new revisions to Cloud Run |
 | `roles/firebasehosting.admin`       | Project   | Deploy static assets and rewrites to Firebase Hosting (INFRA-001) |
-| `roles/cloudfunctions.developer`    | `server` function (INFRA-002) | Deploy the Firebase Function that serves the SPA shell |
+| `roles/cloudfunctions.developer`    | Project   | Deploy all Cloud Functions — Firebase Function `server` (INFRA-002) and Gen 2 functions (INFRA-008a, 008c, 008d, INFRA-014) |
 
 **Workload Identity Federation Configuration (Application CI/CD)**:
 
@@ -629,4 +634,4 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - **AC-SEC-017**: Given the Cloud Run service account, when accessing Firestore Native (`vector-search` database), then it has only `roles/datastore.viewer` (read-only); write access to Firestore Native is restricted to the `sync-article-embeddings` Cloud Function SA.
 - **AC-SEC-018**: Given query parameters on any `GET` endpoint, when unknown or malformed parameters are present, then the backend returns HTTP `400` with a standard error response body.
 - **AC-SEC-019**: Given an indefinitely banned IP whose `rate_limit_offenders` document is deleted from Firestore, when the LRU cache TTL (60 seconds) expires, then the IP is unblocked and can access the site normally.
-- **AC-SEC-020**: Given the application CI/CD pipeline (SEC-014), when GitHub Actions deploys the application, then Workload Identity Federation is used via the `app-deployer@` service account with only `roles/artifactregistry.writer`, `roles/run.developer`, `roles/firebasehosting.admin`, and `roles/cloudfunctions.developer` — no infrastructure management roles.
+- **AC-SEC-020**: Given the application CI/CD pipeline (SEC-014), when GitHub Actions deploys the application, then Workload Identity Federation is used via the `app-deployer@` service account with only `roles/artifactregistry.writer`, `roles/run.developer`, `roles/firebasehosting.admin`, and `roles/cloudfunctions.developer` (project-level, covering all 5 Cloud Functions) — no infrastructure management roles.

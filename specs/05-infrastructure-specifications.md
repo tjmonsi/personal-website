@@ -1,8 +1,8 @@
 ---
 title: Infrastructure Specifications
-version: 4.4
+version: 4.6
 date_created: 2026-02-17
-last_updated: 2026-02-21
+last_updated: 2026-02-22
 owner: TJ Monserrat
 tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac, artifact-registry, cloud-dns, pubsub]
 ---
@@ -783,6 +783,7 @@ Terraform manages GCP resources defined in the spec, including but not limited t
 - Cloud Logging default bucket retention configuration (INFRA-007)
 - Firestore Native database (INFRA-012)
 - Artifact Registry (INFRA-018)
+- Cloud Storage media bucket (INFRA-019)
 - Cloud DNS (INFRA-017)
 - IAM bindings and service accounts (except bootstrap resources)
 - Workload Identity Federation pools and providers (SEC-010 content CI/CD pool only; Terraform CI/CD pool is a bootstrap resource — see below)
@@ -1258,18 +1259,20 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
 
 **Pipeline Stages**:
 
-1. **Lint**: Run Go linter (`golangci-lint`) and frontend linter (`eslint`).
-2. **Test**: Run Go unit tests (`go test ./...`) and frontend tests (`vitest`).
+1. **Lint**: Run Go linter (`golangci-lint`), frontend linter (`eslint`), and Cloud Functions linter (`eslint` for Node.js Cloud Functions code).
+2. **Test**: Run Go unit tests (`go test ./...`), frontend tests (`vitest`), and Cloud Functions unit tests (Node.js test runner for Gen 2 function code).
 3. **Build**:
    - **Backend**: Build the Go backend Docker image. Image tag format: `asia-southeast1-docker.pkg.dev/<project-id>/website-images/backend:<git-sha-short>` (e.g., `backend:a1b2c3d`).
    - **Frontend**: Build the Nuxt 4 SPA (`nuxt build`).
 4. **Scan**:
    - **Go**: Run `govulncheck` to check for known vulnerabilities in Go dependencies.
    - **Frontend**: Run `npm audit` to check for known vulnerabilities in npm dependencies.
+   - **Cloud Functions**: Run `npm audit` for Cloud Functions Node.js dependencies.
    - **Docker image**: Scan the built Docker image for OS and library vulnerabilities (e.g., using `trivy` or Google Artifact Analysis).
 5. **Deploy** (only on push to `main`, not on PRs):
    - **Backend**: Push the Docker image to Artifact Registry (INFRA-018). Deploy to Cloud Run (INFRA-003) using `gcloud run deploy`.
    - **Frontend**: Deploy to Firebase Hosting and Functions via `firebase deploy --only hosting,functions`.
+   - **Cloud Functions (Gen 2)**: Deploy the 4 Gen 2 Cloud Functions (INFRA-008a, 008c, 008d, INFRA-014) via `gcloud functions deploy`. Each function is deployed individually with its respective service account and trigger configuration.
 
 **Authentication**: The CI/CD pipeline SHALL authenticate to GCP using **Workload Identity Federation** (WIF). No long-lived service account keys are permitted (see SEC-014).
 

@@ -1,8 +1,8 @@
 ---
 title: Data Model Specifications
-version: 3.2
+version: 3.3
 date_created: 2026-02-17
-last_updated: 2026-02-21
+last_updated: 2026-02-22
 owner: TJ Monserrat
 tags: [data-model, database, firestore, mongodb, vector-search]
 ---
@@ -145,7 +145,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `abstract`     | string     | Yes      | Brief description                              |
 | `tags`         | string[]   | Yes      | List of tags (all values MUST be lowercase)    |
 | `external_url` | string     | Yes      | URL to the external content                    |
-| `content_hash` | string     | Yes      | Pre-computed SHA-256 hash of the document content. Used by the backend for ETag generation and conditional request handling. Computed by the content CI/CD pipeline on each update. |
+| `content_hash` | string     | Yes      | Pre-computed SHA-256 hash of the document content. Used by the `sync-article-embeddings` Cloud Function (INFRA-014) for change detection — determines which documents need re-embedding. Not used by the backend for ETag/conditional requests (no `/others` detail endpoint exists). Computed by the content CI/CD pipeline on each update. |
 | `date_created` | datetime   | Yes      | Date of original content (UTC)                 |
 | `date_updated` | datetime   | Yes      | Last metadata update (UTC)                     |
 
