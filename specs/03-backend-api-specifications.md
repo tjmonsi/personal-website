@@ -1,8 +1,8 @@
 ---
 title: Backend API Specifications
-version: 3.6
+version: 3.7
 date_created: 2026-02-17
-last_updated: 2026-02-20
+last_updated: 2026-02-21
 owner: TJ Monserrat
 tags: [backend, api, go, fiber, cloud-run, breadcrumbs]
 ---
@@ -20,6 +20,22 @@ tags: [backend, api, go, fiber, cloud-run, breadcrumbs]
 - **Domain**: `api.tjmonsi.com`
 
 ### Global API Rules
+
+#### Middleware Execution Order
+
+THE SYSTEM SHALL execute middleware layers in the following order for every incoming HTTP request:
+
+1. **Request ID generation + Breadcrumb initialization** — Generate a unique request ID and create the per-request breadcrumb collector (see BE-BREADCRUMB).
+2. **CORS handling** — Evaluate CORS headers. Return early for `OPTIONS` preflight requests (no further processing).
+3. **Ban status check** — Look up the client IP in the LRU cache (then Firestore on cache miss) for active bans. Return `429`, `403`, or `404` as appropriate.
+4. **HTTP method enforcement** — Verify the request method is allowed for the matched route. Return `405` if not.
+5. **Route matching** — Match the request path to a registered endpoint. Return `404` for unmatched routes.
+6. **Request body size check** — For `POST /t` only: reject requests with `Content-Length` exceeding 100 KB with `413`.
+7. **Authentication** — For `POST /t` only: validate the JWT in the request body. Return `403` if invalid.
+8. **Input validation** — Validate query parameters, path parameters, and request body fields. Return `400` on failure.
+9. **Business logic** — Execute the endpoint handler (database queries, vector search, response formatting, etc.).
+
+> **Note**: `OPTIONS` requests exit at step 2 (CORS). `GET /health` bypasses steps 3, 6, and 7 (no ban check, no body size check, no auth).
 
 #### Allowed HTTP Methods
 
@@ -271,7 +287,7 @@ Standard error codes: `VALIDATION_ERROR`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `RA
 - THE SYSTEM SHALL fetch the front page markdown content from the database.
 - THE SYSTEM SHALL return the raw markdown string as the response body with `Content-Type: text/markdown`.
 - THE SYSTEM SHALL set `Cache-Control: public, max-age=300` on all successful responses. (CLR-164)
-- THE SYSTEM SHALL include `ETag` (SHA-256 weak ETag: `W/"<sha256-hex>"`) and `Last-Modified` headers in responses. WHEN the client sends `If-None-Match` or `If-Modified-Since` headers that match the current state, THE SYSTEM SHALL return `304 Not Modified` with no body. (CLR-171)
+- THE SYSTEM SHALL include `ETag` (SHA-256 weak ETag: `W/"<sha256-hex>"`) and `Last-Modified` headers in responses. The ETag value SHALL be derived from the pre-computed `content_hash` field stored in the document (see DM-001). WHEN the client sends an `If-None-Match` header, THE SYSTEM SHALL compare it against the stored `content_hash` WITHOUT fetching the full document content. IF the ETag matches, THE SYSTEM SHALL return `304 Not Modified` with no body. WHEN the client sends an `If-Modified-Since` header, THE SYSTEM SHALL compare it against the stored `date_updated`. This pre-computed approach avoids a full Firestore read on conditional requests. (CLR-171)
 - IF the content is not found, THE SYSTEM SHALL return `404`.
 
 ---
@@ -300,6 +316,7 @@ Standard error codes: `VALIDATION_ERROR`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `RA
 - IF `tag_match` is provided and is not `all` or `any`, THE SYSTEM SHALL return `400`.
 - IF the `tags` parameter contains more than **10** tags, THE SYSTEM SHALL return `400` with an appropriate error message (e.g., `"Maximum of 10 tags allowed"`). (CLR-160)
 - IF `q` is present but empty or whitespace-only, THE SYSTEM SHALL treat it as absent (no vector search; return standard date-sorted listing). (CLR-189)
+- IF `date_from` and `date_to` are both present AND `date_from` is after `date_to`, THE SYSTEM SHALL return `400` with error code `VALIDATION_ERROR` and message `"date_from must be on or before date_to"`.
 
 **Response** (`200`):
 
@@ -359,8 +376,10 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 3. **Check embedding cache**: Look up the UUID in the `embedding_cache` collection (DM-011) in Firestore Enterprise.
    - **Cache hit**: Verify the cached entry's `model_version` matches the current model version. If it matches, use the cached embedding vector. If it does not match, treat as a cache miss (re-generate embedding and update the cache entry). (CLR-136)
    - **Cache miss**: Call Vertex AI Gemini `gemini-embedding-001` API with `task_type=RETRIEVAL_QUERY` and `output_dimensionality=2048` to generate a 2048-dimensional embedding vector. L2-normalize the vector before storage. Store the UUID, normalized vector, and current `model_version` in the `embedding_cache` collection (no search string stored). No cache expiration.
+   - **Vertex AI failure handling**: THE SYSTEM SHALL set a **5-second timeout** on the Vertex AI embedding API call. IF the Vertex AI API call fails (error, timeout, quota exceeded, or network failure) AND no cached embedding exists for the query, THE SYSTEM SHALL return `404` (masked internal error per SEC-004) and log the error with full server breadcrumbs. The 5-second timeout is a sub-timeout within the 30-second Cloud Run request timeout.
 4. **Vector search**: Query the appropriate Firestore Native collection (`technical_article_vectors`, `blog_article_vectors`, or `others_vectors` — see DM-012) using the embedding vector with `findNearest()` (cosine distance). Exclude results with cosine distance > **0.35** (configurable threshold — see AD-020).
-5. **Apply filters**: Query Firestore Enterprise with the candidate document IDs from step 4 using a single MongoDB query. If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), apply them at the database level in the same query: `{ _id: { $in: [...ids] }, category: "...", tags: { $all: [...] }, ... }`. If no filters, retrieve full documents from Firestore Enterprise by document IDs (`{ _id: { $in: [...ids] } }`). Filtering SHALL happen at the database level (not in application memory) to minimize data transfer.
+   - **Firestore Native failure handling**: IF the Firestore Native vector search query fails due to connection errors, service unavailability, or timeout, THE SYSTEM SHALL return `404` (masked internal error per SEC-004) and log the error with full server breadcrumbs including the failure step.
+5. **Apply filters**: Query Firestore Enterprise with the candidate document IDs from step 4 using a single MongoDB query. If additional filters are present (`category`, `tags`, `tag_match`, `date_from`, `date_to`), apply them at the database level in the same query. WHEN `tag_match=any` (default), THE SYSTEM SHALL use `tags: { $in: [<tag values>] }`. WHEN `tag_match=all`, THE SYSTEM SHALL use `tags: { $all: [<tag values>] }`. Example: `{ _id: { $in: [...ids] }, category: "...", tags: { $in: [...] }, date_updated: { $gte: ..., $lt: ... } }`. If no filters, retrieve full documents from Firestore Enterprise by document IDs (`{ _id: { $in: [...ids] } }`). Filtering SHALL happen at the database level (not in application memory) to minimize data transfer.
 6. **Sort**: Sort results by cosine distance ascending (most similar first).
 7. **Paginate**: Apply frontend pagination (page number × page size of 10) to the filtered result set. Compute `total_items` and `total_pages` from the filtered set.
 
@@ -425,15 +444,15 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 | Header           | Value                                                    |
 | ---------------- | -------------------------------------------------------- |
 | `Content-Type`   | `text/markdown`                                          |
-| `ETag`           | SHA-256 weak ETag of the response body, formatted as `W/"<sha256-hex>"` (CLR-162) |
+| `ETag`           | SHA-256 weak ETag derived from the pre-computed `content_hash` field (see DM-002/DM-003), formatted as `W/"<content_hash>"` (CLR-162) |
 | `Cache-Control`  | `public, max-age=300` (CLR-164)                          |
 | `Last-Modified`  | `date_updated` formatted as HTTP date (e.g., `Wed, 20 Jun 2025 14:00:00 GMT`) |
 
 **Conditional Request Support**:
 
-- WHEN the client sends an `If-None-Match` header with a previously received `ETag` value, THE SYSTEM SHALL return `304 Not Modified` with an empty body if the article content has not changed.
+- WHEN the client sends an `If-None-Match` header with a previously received `ETag` value, THE SYSTEM SHALL compare it against the article's pre-computed `content_hash` field (see DM-002/DM-003) WITHOUT fetching the full article content. IF the hash matches, THE SYSTEM SHALL return `304 Not Modified` with an empty body.
 - WHEN the client sends an `If-Modified-Since` header with a date, THE SYSTEM SHALL return `304 Not Modified` if the article's `date_updated` is not more recent than the provided date.
-- This enables the frontend's cache-first offline strategy (FE-COMP-008) to efficiently check for updates without re-downloading unchanged content.
+- This pre-computed approach enables efficient conditional requests: the backend can return `304` by reading only the `content_hash` and `date_updated` fields from the article document, without fetching the full `content` field. The content CI/CD pipeline computes and stores `content_hash` when articles are created or updated.
 
 **Behavior**:
 
@@ -543,7 +562,15 @@ All path parameters, validation rules, response format (including `text/markdown
 
 **Description**: Returns the list of all categories across all article types.
 
-**Request**: No parameters.
+**Query Parameters**:
+
+| Parameter | Type   | Required | Description                                    |
+| --------- | ------ | -------- | ---------------------------------------------- |
+| `type`    | string | No       | Filter categories by article type. Must be one of: `technical`, `blog`, `others`. If omitted, all categories are returned. |
+
+**Validation**:
+
+- IF `type` is provided and is not one of `technical`, `blog`, `others`, THE SYSTEM SHALL return `400` with error code `VALIDATION_ERROR`.
 
 **Response** (`200`):
 
@@ -552,10 +579,12 @@ All path parameters, validation rules, response format (including `text/markdown
   "categories": [
     {
       "name": "DevOps",
+      "types": ["technical", "blog"],
       "date_created": "2025-01-10T08:00:00Z"
     },
     {
       "name": "Cloud",
+      "types": ["technical"],
       "date_created": "2025-02-15T12:00:00Z"
     }
   ]
@@ -564,7 +593,8 @@ All path parameters, validation rules, response format (including `text/markdown
 
 **Behavior**:
 
-- THE SYSTEM SHALL return all categories from the `categories` collection, sorted alphabetically by name.
+- WHEN the `type` query parameter is present, THE SYSTEM SHALL return only categories whose `types` array contains the specified type, sorted alphabetically by name.
+- WHEN the `type` query parameter is absent, THE SYSTEM SHALL return all categories from the `categories` collection, sorted alphabetically by name.
 - Categories are free-form and derived from the categories assigned to articles across all article types.
 - THE SYSTEM SHALL set `Cache-Control: public, max-age=3600` on all successful responses. (CLR-164)
 - IF no categories exist, THE SYSTEM SHALL return an empty array.
@@ -579,6 +609,7 @@ All path parameters, validation rules, response format (including `text/markdown
 
 **Authentication**:
 
+- THE SYSTEM SHALL reject `POST /t` requests with `Content-Length` exceeding **100 KB** with HTTP `413 Payload Too Large`. This limit provides protection against oversized payloads while allowing ample room for valid error reports with breadcrumbs.
 - THE SYSTEM SHALL require a valid JWT in the `token` field of the JSON request body.
 - The JWT SHALL be generated by the frontend using a static client ID and static secret embedded (obfuscated) in the frontend code.
 - THE SYSTEM SHALL validate the JWT signature, expiration, and issuer claims.
@@ -720,7 +751,7 @@ For error reporting:
 - IF `action` is `"page_view"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the tracking payload fields (page, referrer, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
 - IF `action` is `"link_click"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the click payload fields (page, clicked_url, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
 - IF `action` is `"time_on_page"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_tracking"` containing the engagement payload fields (page, milestone, action, browser, connection_speed, truncated IP, geo_country, timestamp, visitor_id). This log entry flows to BigQuery via the `sink-frontend-tracking` log sink (INFRA-010e).
-- IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs, truncated IP, geo_country, timestamp, visitor_id). The `breadcrumbs` array (if present) SHALL be included in the structured log entry as-is. This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
+- IF `action` is `"error_report"`, THE SYSTEM SHALL emit a structured log entry with `log_type: "frontend_error"` containing the error payload fields (error_type, error_message, page, browser, connection_speed, client_breadcrumbs, truncated IP, geo_country, timestamp, visitor_id). The frontend `breadcrumbs` array from the request body SHALL be renamed to `client_breadcrumbs` in the structured log entry to distinguish it from the backend's `server_breadcrumbs` (see BE-BREADCRUMB). This log entry flows to BigQuery via the `sink-frontend-errors` log sink (INFRA-010c).
 - THE SYSTEM SHALL NOT write tracking or error report data to Firestore. Structured logging to stdout is the sole persistence mechanism; Cloud Logging routes these entries to BigQuery.
 - THE SYSTEM SHALL set `Cache-Control: no-store` on all responses from this endpoint. (CLR-164)
 - THE SYSTEM SHALL apply the standard rate limiting rules to this endpoint (see SEC-002).

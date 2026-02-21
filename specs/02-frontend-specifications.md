@@ -1,8 +1,8 @@
 ---
 title: Frontend Specifications
-version: 3.3
+version: 3.4
 date_created: 2026-02-17
-last_updated: 2026-02-20
+last_updated: 2026-02-21
 owner: TJ Monserrat
 tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 ---
@@ -325,7 +325,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 ### Visual Design — Light and Dark Mode
 
-**Font**: Google Sans (served from Google Fonts CDN).
+**Font**: Google Sans (self-hosted). Font files SHALL be bundled with the frontend assets and served from `tjmonsi.com` — no external requests to Google Fonts CDN. This is compatible with the current `font-src 'self'` CSP directive (SEC-005) and avoids third-party DNS lookups.
 
 **Design Philosophy**: Minimalistic, clean, and focused on readability and ease of navigation. Subtle shadows and borders SHALL create visual separation between elements without adding visual noise.
 
@@ -721,6 +721,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - **IndexedDB** (from main thread): THE SYSTEM SHALL use IndexedDB to store article metadata (title, slug, category, tags, dates, abstract), reading progress state (scroll percentage — see Reading Progress below), and last-accessed timestamps. IndexedDB SHALL **NOT** duplicate full article content — it serves as a fast lookup index for the offline availability indicator and reading state.
   - **Source of truth** for "is this article available offline?": `caches.match(articleURL)` against the Cache API. IndexedDB is used for metadata display only.
   - THE SYSTEM SHALL manage storage limits gracefully, removing the oldest cached articles when storage is full.
+  - THE SYSTEM SHALL handle `QuotaExceededError` from the Cache API gracefully. WHEN a cache write fails due to storage quota limits, THE SYSTEM SHALL display a snackbar message: "Storage is full. Remove some offline articles to save new ones." The snackbar SHALL persist until the user manually dismisses it.
 - **Offline Retrieval Strategy (Cache-First with Conditional Requests)**:
   - WHEN navigating to a URL, THE SYSTEM SHALL first check if cached content exists (Cache API for content responses, IndexedDB for metadata).
   - IF cached content exists, THE SYSTEM SHALL render from cache immediately.
@@ -797,7 +798,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - "You stumped me. Try a different search?"
 - **Repeated Empty Search Detection**:
   - THE SYSTEM SHALL track consecutive empty search results in the current session (frontend-only, no server call).
-  - THE SYSTEM SHALL detect duplicate search requests using the full request signature: `q` + `category` + `tags` + `tag_match` + `date_from` + `date_to`. Two requests are considered duplicates when their `q` values match (exact string match or standard Levenshtein distance ≤ 2 on the lowercased, trimmed query string — not Damerau-Levenshtein) AND all filter parameters are identical. Duplicate requests SHALL return cached results instead of making a new API call. (CLR-165, CLR-179)
+  - THE SYSTEM SHALL detect duplicate search requests using the full request signature: `q` + `category` + `tags` + `tag_match` + `date_from` + `date_to` + `page`. Two requests are considered duplicates when their `q` values match (exact string match or standard Levenshtein distance ≤ 2 on the lowercased, trimmed query string — not Damerau-Levenshtein) AND all filter parameters (including `page`) are identical. Duplicate detection and cached result return SHALL apply ONLY to searches that returned empty results. Non-empty search results are NOT cached by this mechanism; pagination changes always trigger API calls. (CLR-165, CLR-179)
   - IF the user submits a search that returns the same empty result (matching the "similar" query criteria above), THE SYSTEM SHALL escalate the message to a more humorous tone. Examples:
     - "What are you trying to find? I genuinely want to help."
     - "Try and try again, but the results won't change."
@@ -882,6 +883,12 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   - THE SYSTEM SHALL close the navigation drawer when the user taps outside of it, taps a navigation link, or taps a close button.
   - THE SYSTEM SHALL include a semi-transparent overlay behind the navigation drawer when it is open.
 - THE SYSTEM SHALL visually indicate the currently active page in the navigation.
+- **Dark Mode Toggle**:
+  - THE SYSTEM SHALL display a toggle button in the site header with a sun icon (light mode) or moon icon (dark mode).
+  - The toggle SHALL cycle between `light` → `dark` → `auto` (OS preference). The initial state on first visit SHALL be `auto`.
+  - WHEN the user clicks the toggle, THE SYSTEM SHALL update the theme immediately and persist the preference in `localStorage`.
+  - The toggle button SHALL include `aria-label` indicating the current action (e.g., `"Switch to dark mode"`, `"Switch to light mode"`, `"Switch to auto mode"`).
+  - **Mobile**: THE SYSTEM SHALL display the dark mode toggle alongside the hamburger icon (visible in the header bar, not hidden inside the drawer).
 
 ---
 

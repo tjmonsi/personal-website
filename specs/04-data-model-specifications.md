@@ -1,8 +1,8 @@
 ---
 title: Data Model Specifications
-version: 3.1
+version: 3.2
 date_created: 2026-02-17
-last_updated: 2026-02-19
+last_updated: 2026-02-21
 owner: TJ Monserrat
 tags: [data-model, database, firestore, mongodb, vector-search]
 ---
@@ -33,6 +33,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | ------------- | -------- | -------- | ------------------------------------ |
 | `_id`         | string   | Yes      | Document identifier                  |
 | `content`     | string   | Yes      | Markdown content of the front page   |
+| `content_hash`| string   | Yes      | Pre-computed SHA-256 hash of the `content` field. Used by the backend for ETag generation and conditional request handling (304 Not Modified) without fetching the full document content. Computed by the content CI/CD pipeline on each update. |
 | `date_updated`| datetime | Yes      | Last update timestamp (UTC)          |
 
 **Constraints**:
@@ -54,6 +55,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `abstract`     | string     | Yes      | Brief summary / excerpt                        |
 | `tags`         | string[]   | Yes      | List of tags (all values MUST be lowercase)    |
 | `content`      | string     | Yes      | Full article body in markdown                  |
+| `content_hash` | string     | Yes      | Pre-computed SHA-256 hash of the full response body (YAML front matter + content). Used by the backend for ETag generation and conditional request handling (304 Not Modified) without fetching the full `content` field. Computed by the content CI/CD pipeline on each update. |
 | `changelog`    | object[]   | Yes      | Array of changelog entries                     |
 | `changelog[].date`        | datetime | Yes | Date of the change                    |
 | `changelog[].description` | string   | Yes | Description of what changed           |
@@ -143,6 +145,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `abstract`     | string     | Yes      | Brief description                              |
 | `tags`         | string[]   | Yes      | List of tags (all values MUST be lowercase)    |
 | `external_url` | string     | Yes      | URL to the external content                    |
+| `content_hash` | string     | Yes      | Pre-computed SHA-256 hash of the document content. Used by the backend for ETag generation and conditional request handling. Computed by the content CI/CD pipeline on each update. |
 | `date_created` | datetime   | Yes      | Date of original content (UTC)                 |
 | `date_updated` | datetime   | Yes      | Last metadata update (UTC)                     |
 
@@ -175,6 +178,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | -------------- | -------- | -------- | ------------------------------------ |
 | `_id`          | string   | Yes      | Document identifier                  |
 | `name`         | string   | Yes      | Category name (e.g., "DevOps", "Cloud", "AI/ML") |
+| `types`        | string[] | Yes      | Article types that use this category (e.g., `["technical", "blog"]`). Valid values: `technical`, `blog`, `others`. The content CI/CD pipeline maintains this array when creating or updating articles. |
 | `date_created` | datetime | Yes      | When the category was first created (UTC) |
 
 **Indexes**:

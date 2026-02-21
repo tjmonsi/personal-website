@@ -1,8 +1,8 @@
 ---
 title: Observability Specifications
-version: 3.7
+version: 3.8
 date_created: 2026-02-17
-last_updated: 2026-02-20
+last_updated: 2026-02-21
 owner: TJ Monserrat
 tags: [observability, logging, monitoring, tracking, vector-search, terraform, alerting, sli, slo, breadcrumbs]
 ---
@@ -136,7 +136,7 @@ The following examples illustrate the three distinct log entry types. Each examp
     "downlink": 1.5,
     "rtt": 300
   },
-  "breadcrumbs": [
+  "client_breadcrumbs": [
     {
       "timestamp": "2026-02-17T10:35:55.100Z",
       "type": "navigation",
@@ -149,7 +149,7 @@ The following examples illustrate the three distinct log entry types. Each examp
 }
 ```
 
-> This example does **not** include `server_breadcrumbs` (INFO-level). It includes `log_type: "frontend_error"`, the error-specific fields (`error_type`, `error_message`, `breadcrumbs`), and `geo_country`. Note that the `breadcrumbs` array here is the **client-side** breadcrumb trail (FE-COMP-013), not the server-side `server_breadcrumbs`.
+> This example does **not** include `server_breadcrumbs` (INFO-level). It includes `log_type: "frontend_error"`, the error-specific fields (`error_type`, `error_message`, `client_breadcrumbs`), and `geo_country`. Note that the `client_breadcrumbs` array here is the **client-side** breadcrumb trail (FE-COMP-013), renamed from `breadcrumbs` in the request body during log emission to distinguish it from the server-side `server_breadcrumbs`.
 
 > **Note on `labels`**: The `labels` field is included only when applicable. When an internal server error is masked as a 404 response, the log entry MUST include `"masked_500": true` in the `labels` object. This label is used by OBS-005 alerting to detect masked 500 errors.
 
@@ -175,7 +175,7 @@ The following examples illustrate the three distinct log entry types. Each examp
 
 - Every incoming request (INFO): method, path, status, latency
 - Every `POST /t` tracking request (INFO): include `log_type: "frontend_tracking"`, the `visitor_id` (server-computed hash), `geo_country` (from GeoIP lookup — CLR-123), and the tracking payload fields (page, referrer, action, browser, connection_speed, plus action-specific fields such as `clicked_url` for `link_click` and `milestone` for `time_on_page`) in the structured log entry
-- Every `POST /t` error report (INFO): include `log_type: "frontend_error"`, the `visitor_id`, `geo_country`, and the error payload fields (error_type, error_message, page, browser, connection_speed, breadcrumbs) in the structured log entry. The `breadcrumbs` array (up to 50 client-side activity entries from FE-COMP-013) is included verbatim in the log entry and flows to the `frontend_error_logs` BigQuery table
+- Every `POST /t` error report (INFO): include `log_type: "frontend_error"`, the `visitor_id`, `geo_country`, and the error payload fields (error_type, error_message, page, browser, connection_speed, client_breadcrumbs) in the structured log entry. The `client_breadcrumbs` array (up to 50 client-side activity entries from FE-COMP-013, renamed from `breadcrumbs` in the request body) is included verbatim in the log entry and flows to the `frontend_error_logs` BigQuery table
 - Rate limit triggered (WARNING): client identifier, endpoint, offense count
 - Rate limit ban applied (WARNING): client identifier, ban tier, expiry
 - Internal error masked as 404 (ERROR): full error details
@@ -290,7 +290,7 @@ The following examples illustrate the three distinct log entry types. Each examp
 | Browser + version    | `navigator.userAgent`                     |
 | IP address           | Server-side from request headers          |
 | Connection speed     | `navigator.connection` API (where available) |
-| Breadcrumbs          | FE-COMP-013 activity trail (up to 50 entries) |
+| Breadcrumbs          | FE-COMP-013 activity trail (up to 50 entries), logged as `client_breadcrumbs` |
 | Timestamp            | Server-side UTC timestamp                 |
 
 **Connection Speed Detection**:
@@ -326,10 +326,10 @@ The `frontend_error_logs` BigQuery table receives structured log entries contain
 
 | BigQuery Column              | Source              | Type                              | Description                                                       |
 | ---------------------------- | ------------------- | --------------------------------- | ----------------------------------------------------------------- |
-| `jsonPayload.breadcrumbs`    | Client (FE-COMP-013)| RECORD (REPEATED)                 | Client-side activity trail: up to 50 entries with `timestamp`, `type`, `message`, `data` |
+| `jsonPayload.client_breadcrumbs` | Client (FE-COMP-013)| RECORD (REPEATED)                 | Client-side activity trail (renamed from `breadcrumbs` in request body): up to 50 entries with `timestamp`, `type`, `message`, `data` |
 | `jsonPayload.server_breadcrumbs` | Server (BE-BREADCRUMB) | RECORD (REPEATED)            | Server-side processing steps: timestamped entries with `step`, `message`, `data` |
 
-The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (no client-side `breadcrumbs`).
+The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (no client-side `client_breadcrumbs`).
 
 > **Note**: BigQuery's automatic schema detection handles nested JSON objects and arrays. No manual schema definition is required. However, if querying breadcrumb data in Looker Studio or BigQuery SQL, use `UNNEST()` to flatten the repeated records for analysis.
 

@@ -1,8 +1,8 @@
 ---
 title: Infrastructure Specifications
-version: 4.0
+version: 4.1
 date_created: 2026-02-17
-last_updated: 2026-02-20
+last_updated: 2026-02-21
 owner: TJ Monserrat
 tags: [infrastructure, gcp, cloud-run, firebase, firestore, bigquery, looker-studio, vector-search, vertex-ai, terraform, iac, artifact-registry, cloud-dns, pubsub]
 ---
@@ -642,6 +642,7 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 
 **Notes**:
 - This function is idempotent. Running it multiple times produces the same result.
+- **Concurrent execution**: The `sync-article-embeddings` function may be triggered concurrently by the content CI/CD pipeline and the daily Cloud Scheduler job (INFRA-014b). Because the function is idempotent (hash-based change detection), concurrent executions produce correct results with no data corruption. The only side effect is occasional duplicate Vertex AI embedding API calls. This is an accepted trade-off for simplicity — the low frequency of concurrent triggers (at most once per day overlap) and the low cost of individual embedding calls do not justify adding a distributed lock mechanism.
 - The hash-based change detection avoids unnecessary Gemini API calls, reducing cost.
 - The content CI/CD pipeline SHALL call this function after successfully pushing content to Firestore Enterprise.
 - Cloud Scheduler (INFRA-014b) triggers this function daily as a safety net to catch any missed syncs.
@@ -696,6 +697,8 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
 - The function is idempotent — if all embeddings are already in sync (hash unchanged), the function exits quickly with no Gemini API calls.
 - Running at 04:00 UTC minimizes overlap with peak traffic (asia-southeast1 timezone).
 - This is the 3rd Cloud Scheduler job (alongside `trigger-sitemap-generation` and `trigger-cleanup-rate-limit-offenders`), within the free tier of 3 jobs.
+
+> **Cloud Scheduler Free Tier Ceiling**: All 3 Cloud Scheduler free-tier job slots are now used. Any additional scheduled tasks (e.g., periodic cache purge, analytics rollup, GeoIP database update notification) would require upgrading to the paid tier ($0.10/job/month). Consider consolidating future scheduled tasks into a single dispatcher function if needed.
 
 ---
 
@@ -1220,6 +1223,40 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
 
 ---
 
+#### INFRA-020: Application CI/CD Pipeline (GitHub Actions)
+
+**Purpose**: Build, test, scan, and deploy the Go backend (to Cloud Run via Artifact Registry) and the Nuxt 4 frontend (to Firebase Hosting via Firebase Functions). This pipeline is triggered on pushes to the `main` branch of the application repository.
+
+**Trigger Conditions**:
+
+| Trigger                | Action                                              |
+| ---------------------- | --------------------------------------------------- |
+| Push to `main` branch  | Full pipeline: lint → test → build → scan → deploy |
+| Pull request to `main` | Lint → test → build → scan (no deploy)             |
+
+**Pipeline Stages**:
+
+1. **Lint**: Run Go linter (`golangci-lint`) and frontend linter (`eslint`).
+2. **Test**: Run Go unit tests (`go test ./...`) and frontend tests (`vitest`).
+3. **Build**:
+   - **Backend**: Build the Go backend Docker image. Image tag format: `asia-southeast1-docker.pkg.dev/<project-id>/website-images/backend:<git-sha-short>` (e.g., `backend:a1b2c3d`).
+   - **Frontend**: Build the Nuxt 4 SPA (`nuxt build`).
+4. **Scan**:
+   - **Go**: Run `govulncheck` to check for known vulnerabilities in Go dependencies.
+   - **Frontend**: Run `npm audit` to check for known vulnerabilities in npm dependencies.
+   - **Docker image**: Scan the built Docker image for OS and library vulnerabilities (e.g., using `trivy` or Google Artifact Analysis).
+5. **Deploy** (only on push to `main`, not on PRs):
+   - **Backend**: Push the Docker image to Artifact Registry (INFRA-018). Deploy to Cloud Run (INFRA-003) using `gcloud run deploy`.
+   - **Frontend**: Deploy to Firebase Hosting via `firebase deploy --only hosting`.
+
+**Authentication**: The CI/CD pipeline SHALL authenticate to GCP using **Workload Identity Federation** (WIF). No long-lived service account keys are permitted (see SEC-012).
+
+**Rollback Strategy**: Cloud Run maintains the previous revision. Rollback is performed by redeploying the previous Docker image tag or by using `gcloud run services update-traffic` to route traffic back to the previous revision.
+
+> **Note**: The content management CI/CD pipeline (which pushes articles to Firestore Enterprise and triggers `sync-article-embeddings`) is a **separate pipeline** in a separate repository. See INFRA-014 Integration Contract for its interface requirements.
+
+---
+
 ### Acceptance Criteria
 
 - **AC-INFRA-001**: Given the Cloud Run service (INFRA-003), when deployed, then it runs with 1 vCPU, 1 GB RAM, min instances = 0, max instances = 5, and scale-to-zero is functional.
@@ -1241,3 +1278,4 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
 - **AC-INFRA-017**: Given the `process-rate-limit-logs` Cloud Function (INFRA-008c), when a Cloud Armor 429 log event is received via Pub/Sub (`rate-limit-events` topic), then it writes or updates an offense record in the `rate_limit_offenders` Firestore collection (DM-009).
 - **AC-INFRA-018**: Given the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d), when triggered by Cloud Scheduler, then it deletes expired offender records (no active ban, no offenses in last 90 days) from the `rate_limit_offenders` collection.
 - **AC-INFRA-019**: Given Cloud Scheduler jobs (INFRA-008b, 008e, 014b), when scheduled, then `trigger-sitemap-generation` runs every 6 hours, `trigger-cleanup-rate-limit-offenders` runs daily, and `trigger-sync-article-embeddings` runs daily at 04:00 UTC — all within the free tier of 3 jobs.
+- **AC-INFRA-020**: Given the application CI/CD pipeline (INFRA-020), when code is pushed to `main`, then the pipeline runs lint, test, build, scan, and deploy stages; the Docker image is pushed to Artifact Registry and deployed to Cloud Run; and the Nuxt 4 frontend is deployed to Firebase Hosting.
