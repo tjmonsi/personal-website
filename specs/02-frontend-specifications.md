@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 3.6
+version: 3.7
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -532,8 +532,8 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
   1. **Silent**: For tracking event failures (`page_view`, `link_click`, `time_on_page`). No user feedback.
   2. **Toast**: When an error report is successfully sent to the backend. Brief confirmation toast.
   3. **Modal**: When error report delivery fails after all 5 retries AND the failure was caused by a backend error response (not `503` or network unavailability). The modal allows users to manually share error data.
-- **Critical errors** (show modal after retry exhaustion):
-  - All 5 retry attempts exhausted AND failure was a backend error response (any HTTP status other than `503`).
+- **Critical errors** (show modal after retry exhaustion or non-retryable error):
+  - All 5 retry attempts exhausted OR a non-retryable error received, AND the failure was a backend error response (any HTTP status other than `503`).
 - **Non-critical errors** (show toast on successful report, silent on failure):
   - Background tracking failures (`page_view`, `link_click`, `time_on_page`).
   - Error reports that fail due to persistent network unavailability (device offline).
@@ -550,7 +550,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 **Error Report Delivery Failure Modal** (FE-COMP-005-MODAL):
 
-- IF all 5 retry attempts are exhausted AND the failure was caused by a backend error response (any HTTP status other than `503`), THE SYSTEM SHALL display a modal dialog to the user.
+- IF all 5 retry attempts are exhausted OR a non-retryable `4xx` error is received, AND the failure was caused by a backend error response (any HTTP status other than `503`), THE SYSTEM SHALL display a modal dialog to the user.
 - IF all 5 retry attempts are exhausted AND the failure was caused by persistent network unavailability (device offline) or a `503` response, THE SYSTEM SHALL fail silently (no modal). The `503` status indicates a temporary infrastructure issue that does not warrant user intervention.
 - The modal SHALL contain:
   - A heading: "Something went wrong"
@@ -934,7 +934,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-019**: Given the breadcrumb buffer already contains 50 entries, when a new interaction occurs, then the oldest entry is evicted and the new entry is appended (ring buffer behavior).
 - **AC-FE-020**: Given a network failure when sending an error report to `POST /t`, when the first attempt fails, then the system retries with exponential backoff (1s, 2s, 4s, 8s, 16s) up to 5 attempts without showing any UI feedback.
 - **AC-FE-021**: Given the device is offline with queued error reports, when the device comes back online, then all queued error reports are flushed immediately.
-- **AC-FE-022**: Given all 5 retry attempts fail due to a backend error response (not 503), when the final retry is exhausted, then a modal is displayed containing the formatted error log, a "Copy to clipboard" button, a link to `/socials`, and a privacy note linking to `/privacy`.
+- **AC-FE-022**: Given all 5 retry attempts fail due to a backend error response (not 503), OR a non-retryable `4xx` error is received, when the final retry is exhausted or the non-retryable error occurs, then a modal is displayed containing the formatted error log, a "Copy to clipboard" button, a link to `/socials`, and a privacy note linking to `/privacy`.
 - **AC-FE-023**: Given all 5 retry attempts fail due to persistent network unavailability or 503 responses, when the final retry is exhausted, then no modal is displayed (silent failure).
 - **AC-FE-024**: Given the error report modal is displayed, when the user clicks "Copy to clipboard", then the error log text (excluding JWT token and visitor_session_id) is copied to the clipboard with a "Copied!" confirmation.
 - **AC-FE-025**: Given the tag chip input on `/technical`, `/blog`, or `/others`, when the user types "Docker," (with trailing comma), then a lowercase chip "docker" appears and the text input is cleared.

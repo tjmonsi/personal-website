@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 4.1
+version: 4.2
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -550,6 +550,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (state bucket), `roles/run.admin`, `roles/cloudfunctions.admin`, `roles/compute.networkAdmin`, `roles/dns.admin`, `roles/artifactregistry.admin`, `roles/logging.admin`, `roles/monitoring.admin`, `roles/iam.serviceAccountAdmin`, `roles/pubsub.admin`, `roles/bigquery.admin`, `roles/datastore.user` (CLR-149) | Project | **Manual** (bootstrap) |
 | 8 | `looker-studio-reader@<project-id>.iam.gserviceaccount.com` | Looker Studio Reader SA | Read-only BigQuery access for Looker Studio dashboards (SEC-009, INFRA-011) | `roles/bigquery.dataViewer` (dataset), `roles/bigquery.jobUser` (project) | `website_logs` dataset + project | Terraform |
 | 9 | `cloud-scheduler-invoker@<project-id>.iam.gserviceaccount.com` | Cloud Scheduler Invoker SA | OIDC token issuer for Cloud Scheduler jobs (INFRA-008b, 008e, 014b) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on target Cloud Functions | Target functions | Terraform |
+| 10 | `app-deployer@<project-id>.iam.gserviceaccount.com` | App Deployer SA | WIF-mapped SA for application CI/CD pipeline (SEC-014, INFRA-020). Deploys frontend to Firebase Hosting/Functions and backend to Cloud Run via Artifact Registry. | `roles/artifactregistry.writer` (Artifact Registry), `roles/run.developer` (Cloud Run), `roles/firebasehosting.admin` (Firebase Hosting), `roles/cloudfunctions.developer` (Firebase Functions) | Project / specific resources | Terraform |
 
 **Security Constraints**:
 
@@ -557,12 +558,53 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - All Terraform-managed service accounts SHALL be created via `google_service_account` resources in Terraform.
 - No service account SHALL have `roles/owner` or `roles/editor`.
 - Service accounts SHALL NOT have cross-component access unless explicitly documented above.
-- WIF-authenticated SAs (#6, #7) do not require JSON key files for CI/CD use.
+- WIF-authenticated SAs (#6, #7, #10) do not require JSON key files for CI/CD use.
 - The Looker Studio SA (#8) requires a JSON key for the Looker Studio data connector. This key SHALL be stored securely by the project owner and rotated every 90 days (see SEC-009).
 
 > **Exception**: Firebase Functions (INFRA-002) uses the Firebase default service account because it only serves static HTML content and does not access any GCP resources. The default SA is acceptable for this component since it has no meaningful permissions to abuse.
 
 > **Note**: The Cloud Run SA (#1) uses `roles/datastore.user` for Firestore Enterprise access via IAM-based MongoDB wire protocol authentication. The Cloud Run service connects using the connection string approach documented at https://docs.cloud.google.com/firestore/mongodb-compatibility/docs/connect#cloud-run. (CLR-148)
+
+---
+
+### SEC-014: Application Deployer Service Account & Workload Identity Federation
+
+**Purpose**: Provide a dedicated, least-privilege service account for the application CI/CD pipeline (GitHub Actions in the `personal-website` repository) to deploy the frontend to Firebase Hosting/Functions and the backend to Cloud Run via Artifact Registry (INFRA-020).
+
+**Service Account**: `app-deployer@<project-id>.iam.gserviceaccount.com`
+
+**Provisioning**: Terraform
+
+**Granted Roles**:
+
+| Role                                | Scope     | Purpose                                           |
+| ----------------------------------- | --------- | ------------------------------------------------- |
+| `roles/artifactregistry.writer`     | Artifact Registry repository (INFRA-018) | Push Docker images for backend deployment |
+| `roles/run.developer`               | Cloud Run service (INFRA-003) | Deploy new revisions to Cloud Run |
+| `roles/firebasehosting.admin`       | Project   | Deploy static assets and rewrites to Firebase Hosting (INFRA-001) |
+| `roles/cloudfunctions.developer`    | `server` function (INFRA-002) | Deploy the Firebase Function that serves the SPA shell |
+
+**Workload Identity Federation Configuration (Application CI/CD)**:
+
+| Setting                       | Value                                              |
+| ----------------------------- | -------------------------------------------------- |
+| Workload Identity Pool        | `terraform-cicd-pool` (shared with SEC-012)        |
+| Workload Identity Provider    | `github-actions` (OIDC)                            |
+| Issuer URI                    | `https://token.actions.githubusercontent.com`      |
+| Allowed audience              | Default (project number)                           |
+| Attribute mapping             | `google.subject` = `assertion.sub`, `attribute.repository` = `assertion.repository` |
+| Attribute condition           | `assertion.repository == "<owner>/personal-website"` |
+| Mapped service account        | `app-deployer@<project-id>.iam.gserviceaccount.com` |
+
+> **Note**: The application CI/CD pipeline shares the `terraform-cicd-pool` WIF pool with the Terraform pipeline (SEC-012) since both operate from the same `personal-website` repository. However, each pipeline impersonates a **different** service account — the Terraform pipeline uses `terraform-builder@` while the application pipeline uses `app-deployer@`. The WIF attribute condition allows the pool to authenticate workflows from the same repo, and the `google-github-actions/auth` action specifies which SA to impersonate per workflow.
+
+**Security Constraints**:
+
+- THE SYSTEM SHALL NOT grant the app deployer SA any infrastructure management roles (no `roles/run.admin`, `roles/cloudfunctions.admin`, `roles/dns.admin`, etc.). Only deployment-level roles are permitted.
+- THE SYSTEM SHALL NOT use long-lived service account keys (JSON key files) for the application CI/CD pipeline. Workload Identity Federation provides short-lived OIDC tokens.
+- THE SYSTEM SHALL NOT grant the app deployer SA access to Firestore Enterprise, Firestore Native, BigQuery, Vertex AI, Cloud Logging, or any data stores.
+- The app deployer SA SHALL NOT have `roles/owner`, `roles/editor`, or any admin-level roles.
+- Reference: [Workload Identity Federation for GitHub Actions](https://cloud.google.com/iam/docs/workload-identity-federation), [google-github-actions/auth](https://github.com/google-github-actions/auth)
 
 ---
 
@@ -587,3 +629,4 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - **AC-SEC-017**: Given the Cloud Run service account, when accessing Firestore Native (`vector-search` database), then it has only `roles/datastore.viewer` (read-only); write access to Firestore Native is restricted to the `sync-article-embeddings` Cloud Function SA.
 - **AC-SEC-018**: Given query parameters on any `GET` endpoint, when unknown or malformed parameters are present, then the backend returns HTTP `400` with a standard error response body.
 - **AC-SEC-019**: Given an indefinitely banned IP whose `rate_limit_offenders` document is deleted from Firestore, when the LRU cache TTL (60 seconds) expires, then the IP is unblocked and can access the site normally.
+- **AC-SEC-020**: Given the application CI/CD pipeline (SEC-014), when GitHub Actions deploys the application, then Workload Identity Federation is used via the `app-deployer@` service account with only `roles/artifactregistry.writer`, `roles/run.developer`, `roles/firebasehosting.admin`, and `roles/cloudfunctions.developer` — no infrastructure management roles.

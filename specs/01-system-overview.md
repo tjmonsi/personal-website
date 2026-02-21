@@ -1,8 +1,8 @@
 ---
 title: System Overview
-version: 3.5
+version: 3.6
 date_created: 2026-02-17
-last_updated: 2026-02-20
+last_updated: 2026-02-21
 owner: TJ Monserrat
 tags: [architecture, system-overview, infrastructure]
 ---
@@ -178,7 +178,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 
               Cloud Logging (receives all service logs)
                            │
-                           ▼ (5 Log Sinks → INFRA-010)
+                           ▼ (6 Log Sinks → INFRA-010)
               ┌──────────────────────────────────┐
               │      BigQuery (website_logs)     │
               └────────────────┬─────────────────┘
@@ -230,7 +230,7 @@ Cloud Scheduler ────────▶│  │  Embedding Sync            �
 - **Cloud Functions**: Log processing function (Gen 2, Node.js) triggered by Cloud Armor log sink via Pub/Sub (`rate-limit-events` topic, see INFRA-008c) in `asia-southeast1`
 - **Cloud Functions**: Rate limit offender cleanup function (Gen 2, Node.js) triggered by Cloud Scheduler daily in `asia-southeast1`
 - **Cloud Functions**: Embedding sync function (Gen 2, Node.js) triggered by Content CI/CD pipeline (via Workload Identity Federation) and Cloud Scheduler (daily safety net, INFRA-014b) to sync content embeddings to Firestore Native in `asia-southeast1`
-- **BigQuery**: Dataset `website_logs` in `asia-southeast1` with 5 tables fed by Cloud Logging log sinks (see INFRA-010)
+- **BigQuery**: Dataset `website_logs` in `asia-southeast1` with 6 tables fed by Cloud Logging log sinks (see INFRA-010a–010f)
 - **Looker Studio**: Owner-operated analytics dashboards connected to BigQuery via service account (see INFRA-011)
 - **Firebase Hosting**: Global CDN distribution for static assets
 - **Firebase Functions**: Serves the Nuxt 4 SPA shell

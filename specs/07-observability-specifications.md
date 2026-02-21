@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 3.9
+version: 4.0
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -445,7 +445,7 @@ The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (
 - Cloud Armor activity (rate limit blocks, WAF events)
 - Traffic patterns and request latency analysis
 
-**Data Flow**: Cloud Logging → BigQuery log sinks (5 tables) → Looker Studio data connector (service account) → Analytics dashboards.
+**Data Flow**: Cloud Logging → BigQuery log sinks (6 tables) → Looker Studio data connector (service account) → Analytics dashboards.
 
 ---
 

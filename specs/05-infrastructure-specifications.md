@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 4.3
+version: 4.4
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -286,7 +286,7 @@ Where `<project-id>` is the GCP project ID, `<database-id>` is the Firestore dat
 | ------- | ------------------------------- | ------------------------------ |
 | Lint    | ESLint, Stylelint               | golangci-lint                  |
 | Test    | Vitest (unit), Playwright (E2E) | `go test`                      |
-| Build   | `nuxt generate`                 | Docker build                   |
+| Build   | `nuxt build`                    | Docker build                   |
 | Deploy  | Firebase deploy                 | Cloud Run deploy               |
 
 **Pipeline stages (Infrastructure — Terraform)**:
@@ -1037,6 +1037,7 @@ Six Cloud Logging log sinks route logs to dedicated BigQuery tables within the `
 | `frontend_error_logs`     | Truncated IP, browser name/version, geo_country | IP last octet zeroed                   | 2 years   |
 | `backend_error_logs`      | Truncated IP (in request context)             | IP last octet zeroed                   | 2 years   |
 | `frontend_tracking_logs`  | Truncated IP, browser, referrer, page visited, geo_country | IP last octet zeroed                   | 2 years   |
+| `cloud_functions_error_logs` | No personal data (Cloud Functions don't process user requests directly) | N/A | 2 years |
 
 **Notes**:
 - Log sinks operate independently of the existing Cloud Logging log buckets and the rate-limit log sink (INFRA-008c). They do not interfere with each other.
@@ -1065,7 +1066,7 @@ Six Cloud Logging log sinks route logs to dedicated BigQuery tables within the `
 | -------------------------- | -------------------------------------------------- |
 | Data source type           | BigQuery connector                                 |
 | Authentication             | Service account (JSON key)                         |
-| Tables connected           | All 5 tables in `website_logs` dataset             |
+| Tables connected           | All 6 tables in `website_logs` dataset             |
 | Refresh schedule           | Automatic (Looker Studio default)                  |
 
 **Analytics Capabilities**:
@@ -1193,7 +1194,7 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
                            │
                 ┌──────────┼──────────┐
                 ▼          ▼          ▼
-        ┌────────────┐  (5 Log Sinks)
+        ┌────────────┐  (6 Log Sinks)
         │  _Default  │
         │   bucket   │
         │  (90-day)  │
@@ -1207,6 +1208,7 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
               │  • frontend_error_logs           │
               │  • backend_error_logs            │
               │  • frontend_tracking_logs        │
+              │  • cloud_functions_error_logs    │
               └────────────┬─────────────────────┘
                            │ (Service Account)
                            ▼
@@ -1267,9 +1269,9 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
    - **Docker image**: Scan the built Docker image for OS and library vulnerabilities (e.g., using `trivy` or Google Artifact Analysis).
 5. **Deploy** (only on push to `main`, not on PRs):
    - **Backend**: Push the Docker image to Artifact Registry (INFRA-018). Deploy to Cloud Run (INFRA-003) using `gcloud run deploy`.
-   - **Frontend**: Deploy to Firebase Hosting via `firebase deploy --only hosting`.
+   - **Frontend**: Deploy to Firebase Hosting and Functions via `firebase deploy --only hosting,functions`.
 
-**Authentication**: The CI/CD pipeline SHALL authenticate to GCP using **Workload Identity Federation** (WIF). No long-lived service account keys are permitted (see SEC-012).
+**Authentication**: The CI/CD pipeline SHALL authenticate to GCP using **Workload Identity Federation** (WIF). No long-lived service account keys are permitted (see SEC-014).
 
 **Rollback Strategy**: Cloud Run maintains the previous revision. Rollback is performed by redeploying the previous Docker image tag or by using `gcloud run services update-traffic` to route traffic back to the previous revision.
 
@@ -1284,7 +1286,7 @@ Cloud Scheduler ───────▶│  │(Embed Sync)   │             �
 - **AC-INFRA-003**: Given Cloud Armor (INFRA-005), when a client exceeds 60 requests per minute, then the client receives HTTP `429` with a `Retry-After` header.
 - **AC-INFRA-004**: Given the Firestore Enterprise database (INFRA-006), when accessed from the Go backend, then the MongoDB wire protocol connection succeeds via the MongoDB Go driver.
 - **AC-INFRA-005**: Given the VPC (INFRA-009), when Cloud Run sends egress traffic, then Direct VPC Egress routes traffic through the VPC without a Serverless VPC Access Connector.
-- **AC-INFRA-006**: Given the BigQuery dataset (INFRA-010), when log sinks are active, then logs are routed to the correct tables (`all_logs`, `cloud_armor_lb_logs`, `frontend_tracking_logs`, `frontend_error_logs`, `backend_error_logs`).
+- **AC-INFRA-006**: Given the BigQuery dataset (INFRA-010), when log sinks are active, then logs are routed to the correct 6 tables (`all_logs`, `cloud_armor_lb_logs`, `frontend_tracking_logs`, `frontend_error_logs`, `backend_error_logs`, `cloud_functions_error_logs`).
 - **AC-INFRA-007**: Given the Terraform state bucket (INFRA-015), when Terraform runs, then state is stored in `<project-id>-terraform-state` with versioning enabled.
 - **AC-INFRA-008**: Given DNS (INFRA-017), when `tjmonsi.com` and `api.tjmonsi.com` are resolved, then they point to the Load Balancer's IPv4 and IPv6 addresses.
 - **AC-INFRA-009**: Given the Cloud Storage media bucket (INFRA-019), when the Go backend requests an image via `GET /images/{path}`, then the Cloud Run SA has `roles/storage.objectViewer` and can read the object.

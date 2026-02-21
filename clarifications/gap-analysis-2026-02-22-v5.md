@@ -65,6 +65,9 @@ But the following 6 locations say "5":
 - (A) Update all 6 locations to reference 6 sinks/tables. Add a row to the Summary of Data Stored table: `cloud_functions_error_logs | No personal data (Cloud Functions don't process user requests directly) | N/A | 2 years`. Update counts from "5" to "6" everywhere. Add `cloud_functions_error_logs` to AC-INFRA-006's table list and the network diagram.
 - (B) If Cloud Functions error logs don't warrant a separate BigQuery table (they're already in `all_logs`), remove INFRA-010f and update AC-INFRA-021 to remove the reference. (Not recommended — INFRA-010f enables focused querying of CF errors without scanning the full `all_logs` table.)
 
+**Answer**
+Update all 6 locations to reference 6 sinks/tables. Add a row to the Summary of Data Stored table: `cloud_functions_error_logs | No personal data (Cloud Functions don't process user requests directly) | N/A | 2 years`. Update counts from "5" to "6" everywhere. Add `cloud_functions_error_logs` to AC-INFRA-006's table list and the network diagram.
+
 ---
 
 ### FINDING-002 — LOW — Spec: 05
@@ -94,6 +97,8 @@ But the following 6 locations say "5":
 - (A) Update the overview table build command from `nuxt generate` to `nuxt build`. Update INFRA-020 deploy command from `firebase deploy --only hosting` to `firebase deploy --only hosting,functions` (or `firebase deploy` to deploy everything).
 - (B) If the Nuxt 4 Firebase preset convention is just `firebase deploy`, use that instead of specifying `--only` flags.
 
+**Answer**
+Update the overview table build command from `nuxt generate` to `nuxt build`. Update INFRA-020 deploy command from `firebase deploy --only hosting` to `firebase deploy --only hosting,functions` (or `firebase deploy` to deploy everything)
 ---
 
 ### FINDING-003 — LOW — Spec: 02
@@ -114,6 +119,9 @@ But the following 6 locations say "5":
 - (A) Redefine the modal trigger to: "All retry attempts exhausted OR a non-retryable error received, AND the failure was a backend error response (any HTTP status other than `503`)." This routes 4xx errors to the modal, matching the likely intended behavior.
 - (B) Add explicit text to FE-COMP-005-RETRY: "WHEN a non-retryable `4xx` error is received, THE SYSTEM SHALL proceed directly to the modal display logic (same as if all retries are exhausted with a non-503 response)."
 - (C) Define 4xx as silent failure (acceptable for a personal website — these are edge cases caused by frontend bugs)
+
+**Answer**
+Redefine the modal trigger to: "All retry attempts exhausted OR a non-retryable error received, AND the failure was a backend error response (any HTTP status other than `503`)." This routes 4xx errors to the modal, matching the likely intended behavior.
 
 ---
 
@@ -143,6 +151,8 @@ But the following 6 locations say "5":
 - (B) Explicitly document that the Terraform SA is intentionally shared for both infrastructure and application deployment, with a justification for the broader-than-needed roles. (Not recommended — violates least privilege.)
 - (C) Use the Terraform WIF pool with a separate SA binding — document the multi-SA WIF mapping in SEC-012.
 
+**Answer**
+Add a new SA row (#10) to SEC-013: `app-deployer@<project-id>.iam.gserviceaccount.com` with roles: `roles/artifactregistry.writer` (Artifact Registry), `roles/run.developer` (Cloud Run), appropriate Firebase roles for hosting+functions deployment. Create a corresponding SEC section (e.g., SEC-014) detailing this SA. The SA can use the existing `terraform-cicd-pool` WIF pool (same repo) or a dedicated pool. Update INFRA-020 to reference the new SA instead of "see SEC-012."
 ---
 
 ## Summary
