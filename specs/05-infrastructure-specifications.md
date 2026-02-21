@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 4.2
+version: 4.3
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -655,6 +655,7 @@ POST https://asia-southeast1-aiplatform.googleapis.com/v1/projects/{project}/loc
 - The content CI/CD pipeline SHALL call this function after successfully pushing content to Firestore Enterprise.
 - Cloud Scheduler (INFRA-014b) triggers this function daily as a safety net to catch any missed syncs.
 - IF a partial failure occurs during sync (e.g., embedding generation succeeds but Firestore Native write fails), THE SYSTEM SHALL log the failure with document ID and step name, skip the failed document, and continue processing remaining documents. Failed documents SHALL be retried on the next scheduled sync run. The sync log SHALL include a summary of succeeded, failed, and skipped document counts. (CLR-172)
+- **Embedding cache size check**: After completing embedding sync, THE SYSTEM SHALL count the total number of documents in the `embedding_cache` collection (DM-011) in Firestore Enterprise and log the count as an INFO-level structured log entry: `{ "event": "embedding_cache_size_check", "cache_size": <count> }`. This log entry is used by a Cloud Monitoring log-based metric to track cache growth and alert if the count exceeds 1,000 (see OBS-005).
 
 **Integration Contract (Content CI/CD Pipeline)**:
 

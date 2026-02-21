@@ -1,6 +1,6 @@
 ---
 title: Frontend Specifications
-version: 3.5
+version: 3.6
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -518,7 +518,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - WHEN the device comes back online (detected via the `online` event on `window`), THE SYSTEM SHALL immediately attempt to flush all queued error reports.
 - THE SYSTEM SHALL also persist queued error reports to `sessionStorage` (key: `pending_error_reports`) so that payloads survive SPA route changes. Queued reports SHALL NOT persist across browser sessions (i.e., they are lost when the tab is closed).
 - During retries, the process SHALL remain silent (no UI feedback to the user).
-- THE SYSTEM SHALL NOT retry errors that are clearly non-retryable: HTTP `400` (bad request), `403` (forbidden), `405` (method not allowed). Only network errors and server errors (5xx) are retryable.
+- THE SYSTEM SHALL NOT retry errors that are clearly non-retryable: any HTTP `4xx` client error response (including `400`, `403`, `404`, `405`, `413`, and `429`). Only network errors and server errors (`5xx`) are retryable.
 
 **Error Report Delivery Success Toast** (CLR-119):
 
@@ -544,7 +544,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-RETRY-001**: Given a network error when sending an error report, when the first attempt fails, then the payload is queued in memory and `sessionStorage`.
 - **AC-RETRY-002**: Given a queued error report, when the retry timer fires, then the system attempts redelivery with exponential backoff delays of 1s, 2s, 4s, 8s, 16s (with ±20% random jitter per delay — CLR-127).
 - **AC-RETRY-003**: Given an error report retry succeeds, when the response is `200`, then the queued payload is removed and a success toast is displayed.
-- **AC-RETRY-004**: Given a non-retryable error (HTTP `400`, `403`, `405`), when received, then the system does NOT retry and proceeds directly to failure handling.
+- **AC-RETRY-004**: Given a non-retryable error (any HTTP `4xx` response), when received, then the system does NOT retry and proceeds directly to failure handling.
 - **AC-RETRY-005**: Given the device is offline with queued reports, when the `online` event fires, then all queued reports are flushed immediately.
 - **AC-RETRY-006**: Given error reports are queued in `sessionStorage`, when the user navigates to a different SPA route, then the queue persists and retries continue.
 
@@ -658,10 +658,11 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 
 **Requirements**:
 
-- WHEN the frontend navigates to `/technical`, `/blog`, or `/others`, THE SYSTEM SHALL check `localStorage` for a cached categories list. (CLR-199)
-- IF cached categories exist and are less than 24 hours old, THE SYSTEM SHALL use the cached list.
-- IF cached categories do not exist or are older than 24 hours, THE SYSTEM SHALL fetch categories from `GET /categories` and store the result in `localStorage` with a timestamp. (CLR-199)
-- THE SYSTEM SHALL use the categories list to populate the category filter dropdown.
+- WHEN the frontend navigates to `/technical`, `/blog`, or `/others`, THE SYSTEM SHALL check `localStorage` for a cached categories list **specific to the current article type** (e.g., key `categories_technical`, `categories_blog`, `categories_others`). (CLR-199)
+- IF a per-type cached categories entry exists and is less than 24 hours old, THE SYSTEM SHALL use the cached list.
+- IF a per-type cached categories entry does not exist or is older than 24 hours, THE SYSTEM SHALL fetch categories from `GET /categories?type=<page_type>` (where `<page_type>` is `technical`, `blog`, or `others` matching the current route) and store the result in `localStorage` under the per-type key with a timestamp. (CLR-199)
+- THE SYSTEM SHALL use the per-type categories list to populate the category filter dropdown, ensuring only categories relevant to the current article type are shown.
+- Each per-type cache key SHALL have an independent 24-hour TTL. Navigating from `/technical` to `/blog` SHALL use the `categories_blog` cache (not `categories_technical`).
 
 ---
 
@@ -953,7 +954,7 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-039**: Given a backend error response with a mapped status (400, 403, 404, 405, 503, or unmapped status), when the error snackbar is displayed, then the message matches the mapping defined in FE-COMP-003 and the snackbar persists until manually dismissed.
 - **AC-FE-040**: Given a 504 backend response, when the error snackbar is displayed, then it includes "TJ has been notified about the server taking too long" plus one of the 10 randomized funny timeout messages from FE-COMP-003.
 - **AC-FE-041**: Given a user remaining on a page for 1 minute of active foreground time (measured via Page Visibility API), when the milestone is reached, then a `time_on_page` event with `milestone: "1min"` is sent to `POST /t`; the same applies for 2-minute and 5-minute milestones.
-- **AC-FE-042**: Given a user visiting `/technical`, `/blog`, or `/others`, when the category dropdown loads, then it is populated from `GET /categories` or from localStorage cache if the cached data is less than 24 hours old.
+- **AC-FE-042**: Given a user visiting `/technical`, `/blog`, or `/others`, when the category dropdown loads, then it is populated from `GET /categories?type=<page_type>` or from the per-type localStorage cache (e.g., `categories_technical`) if the cached data is less than 24 hours old.
 - **AC-FE-043**: Given a user scrolling past 30% of an article on a 4g connection, when smart download triggers, then up to 3 related articles are prefetched in the background without exceeding the 50 MB storage cap.
 - **AC-FE-044**: Given a user clicking "Save for offline reading" on an article, when the button is clicked, then the article content is cached via the Cache API and metadata stored in IndexedDB; the offline availability indicator updates.
 - **AC-FE-045**: Given a cached article exists and the device is online, when the user visits the article, then the cached content is rendered immediately and a conditional request (`If-None-Match`/`If-Modified-Since`) is sent in the background to check for updates.
@@ -961,3 +962,4 @@ tags: [frontend, nuxt4, vue3, spa, breadcrumbs]
 - **AC-FE-047**: Given a URL with query parameters (e.g., `?q=test&category=devops&page=2`), when the page loads on `/technical`, `/blog`, or `/others`, then the search bar, filter controls, and pagination are initialized from those URL parameters (deep linking).
 - **AC-FE-048**: Given a mobile viewport loading `/technical?page=5`, when the page loads, then page 5 results are displayed as the starting point; downward scroll fetches page 6+; upward scroll fetches pages 4, 3, 2, 1 sequentially. Scrolling up at page 1 triggers a full page refresh.
 - **AC-FE-049**: Given a user visiting `/socials`, when social links are displayed, then each item renders an MDI icon (`@mdi/js`) matching the `icon` field from the API response; items with unknown or missing `icon` values display a generic link icon (`mdiOpenInNew`).
+- **AC-FE-050**: Given a user visiting `/technical`, when the category dropdown loads, then it shows only categories associated with `technical` articles (fetched from `GET /categories?type=technical` or per-type localStorage cache `categories_technical`); the same applies for `/blog` and `/others` with their respective types.

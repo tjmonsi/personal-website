@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 4.0
+version: 4.1
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -545,7 +545,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | 2 | `cf-sitemap-gen@<project-id>.iam.gserviceaccount.com` | Sitemap Generator SA | Identity for the `generate-sitemap` Cloud Function (INFRA-008a) | `roles/datastore.user` (Firestore Enterprise — read `technical_articles`, `blog_articles`; read/write `sitemap`) (CLR-185) | INFRA-008a function | Terraform |
 | 3 | `cf-rate-limit-proc@<project-id>.iam.gserviceaccount.com` | Rate Limit Log Processor SA | Identity for the `process-rate-limit-logs` Cloud Function (INFRA-008c) | `roles/datastore.user` (Firestore Enterprise — read/write `rate_limit_offenders`) (CLR-185) | INFRA-008c function | Terraform |
 | 4 | `cf-offender-cleanup@<project-id>.iam.gserviceaccount.com` | Offender Cleanup SA | Identity for the `cleanup-rate-limit-offenders` Cloud Function (INFRA-008d) | `roles/datastore.user` (Firestore Enterprise — read/write `rate_limit_offenders`) (CLR-185) | INFRA-008d function | Terraform |
-| 5 | `cf-embed-sync@<project-id>.iam.gserviceaccount.com` | Embedding Sync SA | Identity for the `sync-article-embeddings` Cloud Function (INFRA-014) | Firestore Enterprise read (articles), `roles/datastore.user` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI) | INFRA-014 function | Terraform |
+| 5 | `cf-embed-sync@<project-id>.iam.gserviceaccount.com` | Embedding Sync SA | Identity for the `sync-article-embeddings` Cloud Function (INFRA-014) | `roles/datastore.viewer` (Firestore Enterprise — read `technical_articles`, `blog_articles`, `others`), `roles/datastore.user` (Firestore Native `vector-search` DB), `roles/aiplatform.user` (Vertex AI) | INFRA-014 function | Terraform |
 | 6 | `content-cicd@<project-id>.iam.gserviceaccount.com` | Content CI/CD SA | WIF-mapped SA for content repository GitHub Actions (SEC-010). Used only for invoking the embedding sync function — Firestore Enterprise write access for content publishing uses separate credentials provisioned in the content pipeline project (out of scope). | `roles/cloudfunctions.invoker`, `roles/run.invoker` on `sync-article-embeddings` | INFRA-014 function | Terraform |
 | 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.objectAdmin` (state bucket), `roles/run.admin`, `roles/cloudfunctions.admin`, `roles/compute.networkAdmin`, `roles/dns.admin`, `roles/artifactregistry.admin`, `roles/logging.admin`, `roles/monitoring.admin`, `roles/iam.serviceAccountAdmin`, `roles/pubsub.admin`, `roles/bigquery.admin`, `roles/datastore.user` (CLR-149) | Project | **Manual** (bootstrap) |
 | 8 | `looker-studio-reader@<project-id>.iam.gserviceaccount.com` | Looker Studio Reader SA | Read-only BigQuery access for Looker Studio dashboards (SEC-009, INFRA-011) | `roles/bigquery.dataViewer` (dataset), `roles/bigquery.jobUser` (project) | `website_logs` dataset + project | Terraform |

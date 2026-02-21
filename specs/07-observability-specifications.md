@@ -1,6 +1,6 @@
 ---
 title: Observability Specifications
-version: 3.8
+version: 3.9
 date_created: 2026-02-17
 last_updated: 2026-02-21
 owner: TJ Monserrat
@@ -398,6 +398,7 @@ The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (
 | Embedding sync failure          | ERROR log from `sync-article-embeddings` Cloud Function | Email     | Warning |
 | Offender cleanup failure        | ERROR log from `cleanup-rate-limit-offenders` Cloud Function | Email | Warning |
 | High embedding cache miss rate  | `embedding_cache_misses_total` > 50 in 5 min | Email                | Info     |
+| Embedding cache size threshold  | Log-based metric from `sync-article-embeddings` `embedding_cache_size_check` event where `cache_size` > 1,000 | Email | Info |
 | Backend error log               | Any ERROR severity log from Cloud Run backend (INFRA-003) | Email   | Warning  |
 | Cloud Function error log        | Any ERROR severity log from any Cloud Function (INFRA-008a, 008c, 008d, INFRA-014) | Email | Warning |
 | Frontend error log              | Log entry with `jsonPayload.log_type="frontend_error"` from Cloud Run backend (any severity, matching INFRA-010c sink filter) | Email | Warning |
@@ -420,6 +421,7 @@ The `backend_error_logs` BigQuery table will contain `server_breadcrumbs` only (
 - Database query latency by collection
 - Active rate limit bans
 - Embedding cache hit/miss ratio
+- Embedding cache document count (from `sync-article-embeddings` periodic log)
 - Gemini embedding API latency (P50, P95)
 - Vector search latency by collection
 - Vector search candidate count distribution
@@ -572,3 +574,4 @@ Terraform operations (`terraform plan`, `terraform apply`) are observable throug
 - **AC-OBS-008**: Given a backend request that completes successfully (no error), when the log entry is emitted, then the `server_breadcrumbs` field is NOT present in the log entry (breadcrumbs are logged only on ERROR-severity entries).
 - **AC-OBS-009**: Given any Cloud Function (INFRA-008a, 008c, 008d, INFRA-014), when it executes, then it emits structured JSON logs to stdout consistent with the logging requirements defined in OBS-001a (event type, level, and details per function).
 - **AC-OBS-010**: Given the Go backend application running in production, when custom metrics are exported, then Cloud Monitoring receives `api_requests_total`, `api_request_duration_ms`, `db_query_duration_ms`, `embedding_cache_hits_total`, `embedding_cache_misses_total`, `embedding_api_duration_ms`, `vector_search_duration_ms`, and `vector_search_candidates` metrics with their defined labels.
+- **AC-OBS-011**: Given the `sync-article-embeddings` function completes a sync run, when it counts the `embedding_cache` collection documents, then it emits an INFO-level structured log with `event: "embedding_cache_size_check"` and `cache_size` reflecting the current count; a log-based metric alert fires if `cache_size` exceeds 1,000.
