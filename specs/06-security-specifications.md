@@ -1,6 +1,6 @@
 ---
 title: Security Specifications
-version: 4.6
+version: 4.7
 date_created: 2026-02-17
 last_updated: 2026-02-22
 owner: TJ Monserrat
@@ -557,7 +557,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | 7 | `terraform-builder@<project-id>.iam.gserviceaccount.com` | Terraform Builder SA | WIF-mapped SA for Terraform CI/CD pipeline (SEC-012) | `roles/storage.admin` (project), `roles/run.admin`, `roles/cloudfunctions.admin`, `roles/compute.networkAdmin`, `roles/compute.securityAdmin`, `roles/cloudscheduler.admin`, `roles/firebasehosting.admin`, `roles/dns.admin`, `roles/artifactregistry.admin`, `roles/logging.admin`, `roles/monitoring.admin`, `roles/iam.serviceAccountAdmin`, `roles/iam.workloadIdentityPoolAdmin`, `roles/iam.serviceAccountUser`, `roles/serviceusage.serviceUsageAdmin`, `roles/pubsub.admin`, `roles/bigquery.admin`, `roles/datastore.owner` (CLR-149) | Project | **Manual** (bootstrap) |
 | 8 | `looker-studio-reader@<project-id>.iam.gserviceaccount.com` | Looker Studio Reader SA | Read-only BigQuery access for Looker Studio dashboards (SEC-009, INFRA-011) | `roles/bigquery.dataViewer` (dataset), `roles/bigquery.jobUser` (project) | `website_logs` dataset + project | Terraform |
 | 9 | `cloud-scheduler-invoker@<project-id>.iam.gserviceaccount.com` | Cloud Scheduler Invoker SA | OIDC token issuer for Cloud Scheduler jobs (INFRA-008b, 008e, 014b) | `roles/cloudfunctions.invoker`, `roles/run.invoker` on target Cloud Functions | Target functions | Terraform |
-| 10 | `app-deployer@<project-id>.iam.gserviceaccount.com` | App Deployer SA | WIF-mapped SA for application CI/CD pipeline (SEC-014, INFRA-020). Deploys frontend to Firebase Hosting/Functions, backend to Cloud Run via Artifact Registry, and Gen 2 Cloud Functions. | `roles/artifactregistry.writer` (Artifact Registry), `roles/run.developer` (Cloud Run), `roles/firebasehosting.admin` (Firebase Hosting), `roles/cloudfunctions.developer` (all Cloud Functions — `server` + 4 Gen 2), `roles/iam.serviceAccountUser` (SAs #1–#5: actAs for Cloud Run and Cloud Functions deployment) | Project / specific SAs | Terraform |
+| 10 | `app-deployer@<project-id>.iam.gserviceaccount.com` | App Deployer SA | WIF-mapped SA for application CI/CD pipeline (SEC-014, INFRA-020). Deploys frontend to Firebase Hosting/Functions, backend to Cloud Run via Artifact Registry, and Gen 2 Cloud Functions. | `roles/artifactregistry.writer` (Artifact Registry), `roles/run.developer` (Cloud Run), `roles/firebasehosting.admin` (Firebase Hosting), `roles/cloudfunctions.developer` (all Cloud Functions — `server` + 4 Gen 2), `roles/iam.serviceAccountUser` (all Cloud Run/CF runtime SAs: #1–#5 + Compute Engine default SA for INFRA-002) | Project / specific SAs | Terraform |
 
 **Security Constraints**:
 
@@ -590,7 +590,7 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 | `roles/run.developer`               | Cloud Run service (INFRA-003) | Deploy new revisions to Cloud Run |
 | `roles/firebasehosting.admin`       | Project   | Deploy static assets and rewrites to Firebase Hosting (INFRA-001) |
 | `roles/cloudfunctions.developer`    | Project   | Deploy all Cloud Functions — Firebase Function `server` (INFRA-002) and Gen 2 functions (INFRA-008a, 008c, 008d, INFRA-014) |
-| `roles/iam.serviceAccountUser`      | SAs #1–#5 (`cloud-run-api@`, `cf-sitemap-gen@`, `cf-rate-limit-proc@`, `cf-offender-cleanup@`, `cf-embed-sync@`) | Required to deploy Cloud Run and Cloud Functions with custom service accounts (actAs permission on target runtime SAs) |
+| `roles/iam.serviceAccountUser`      | All Cloud Run and Cloud Functions runtime SAs: #1–#5 (`cloud-run-api@`, `cf-sitemap-gen@`, `cf-rate-limit-proc@`, `cf-offender-cleanup@`, `cf-embed-sync@`) + Compute Engine default SA (`<project-number>-compute@developer.gserviceaccount.com`, used by INFRA-002) | Required to deploy Cloud Run and all Cloud Functions with their runtime service accounts (actAs permission on each target SA) |
 
 **Workload Identity Federation Configuration (Application CI/CD)**:
 
@@ -637,4 +637,4 @@ The frontend SHALL include the following headers via Firebase Hosting `firebase.
 - **AC-SEC-017**: Given the Cloud Run service account, when accessing Firestore Native (`vector-search` database), then it has only `roles/datastore.viewer` (read-only); write access to Firestore Native is restricted to the `sync-article-embeddings` Cloud Function SA.
 - **AC-SEC-018**: Given query parameters on any `GET` endpoint, when unknown or malformed parameters are present, then the backend returns HTTP `400` with a standard error response body.
 - **AC-SEC-019**: Given an indefinitely banned IP whose `rate_limit_offenders` document is deleted from Firestore, when the LRU cache TTL (60 seconds) expires, then the IP is unblocked and can access the site normally.
-- **AC-SEC-020**: Given the application CI/CD pipeline (SEC-014), when GitHub Actions deploys the application, then Workload Identity Federation is used via the `app-deployer@` service account with `roles/artifactregistry.writer`, `roles/run.developer`, `roles/firebasehosting.admin`, `roles/cloudfunctions.developer` (project-level, covering all 5 Cloud Functions), and `roles/iam.serviceAccountUser` (scoped to SAs #1–#5 for actAs on Cloud Run and Cloud Functions runtime SAs) — no infrastructure management roles.
+- **AC-SEC-020**: Given the application CI/CD pipeline (SEC-014), when GitHub Actions deploys the application, then Workload Identity Federation is used via the `app-deployer@` service account with `roles/artifactregistry.writer`, `roles/run.developer`, `roles/firebasehosting.admin`, `roles/cloudfunctions.developer` (project-level, covering all 5 Cloud Functions), and `roles/iam.serviceAccountUser` (scoped to all Cloud Run and Cloud Functions runtime SAs: #1–#5 plus Compute Engine default SA for INFRA-002) — no infrastructure management roles.
