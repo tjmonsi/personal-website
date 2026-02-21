@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 4.6
+version: 4.7
 date_created: 2026-02-17
 last_updated: 2026-02-22
 owner: TJ Monserrat
@@ -731,7 +731,7 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
 
 | Principal                              | Role                           | Purpose                                    |
 | -------------------------------------- | ------------------------------ | ------------------------------------------ |
-| Terraform service account (SEC-012)    | `roles/storage.objectAdmin`   | Read/write state files and lock files      |
+| Terraform service account (SEC-012)    | `roles/storage.admin` (Project scope, per SEC-012) | Read/write state files and lock files      |
 
 **Notes**:
 - The bucket stores only Terraform state (`.tfstate`) and lock files. Expected size: < 1 MB.

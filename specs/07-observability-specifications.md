@@ -1,8 +1,8 @@
 ---
 title: Observability Specifications
-version: 4.0
+version: 4.1
 date_created: 2026-02-17
-last_updated: 2026-02-21
+last_updated: 2026-02-22
 owner: TJ Monserrat
 tags: [observability, logging, monitoring, tracking, vector-search, terraform, alerting, sli, slo, breadcrumbs]
 ---
@@ -573,5 +573,5 @@ Terraform operations (`terraform plan`, `terraform apply`) are observable throug
 - **AC-OBS-007**: Given the structured logging format, when any log entry is emitted by the Go backend, then it includes a `request_id` (UUID v4) for correlation.
 - **AC-OBS-008**: Given a backend request that completes successfully (no error), when the log entry is emitted, then the `server_breadcrumbs` field is NOT present in the log entry (breadcrumbs are logged only on ERROR-severity entries).
 - **AC-OBS-009**: Given any Cloud Function (INFRA-008a, 008c, 008d, INFRA-014), when it executes, then it emits structured JSON logs to stdout consistent with the logging requirements defined in OBS-001a (event type, level, and details per function).
-- **AC-OBS-010**: Given the Go backend application running in production, when custom metrics are exported, then Cloud Monitoring receives `api_requests_total`, `api_request_duration_ms`, `db_query_duration_ms`, `embedding_cache_hits_total`, `embedding_cache_misses_total`, `embedding_api_duration_ms`, `vector_search_duration_ms`, and `vector_search_candidates` metrics with their defined labels.
+- **AC-OBS-010**: Given the Go backend application running in production, when custom metrics are exported, then Cloud Monitoring receives all 10 custom metrics: `api_requests_total`, `api_request_duration_ms`, `api_bans_active`, `db_query_duration_ms`, `db_connection_pool_active`, `embedding_cache_hits_total`, `embedding_cache_misses_total`, `embedding_api_duration_ms`, `vector_search_duration_ms`, and `vector_search_candidates` metrics with their defined labels.
 - **AC-OBS-011**: Given the `sync-article-embeddings` function completes a sync run, when it counts the `embedding_cache` collection documents, then it emits an INFO-level structured log with `event: "embedding_cache_size_check"` and `cache_size` reflecting the current count; a log-based metric alert fires if `cache_size` exceeds 1,000.

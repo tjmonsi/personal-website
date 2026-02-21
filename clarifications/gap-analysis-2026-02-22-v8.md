@@ -51,7 +51,7 @@
 - (A) Change `roles/storage.objectAdmin` to `roles/storage.admin` in SEC-012 and SEC-013 SA #7. Update purpose to: "Create and manage Cloud Storage buckets (INFRA-019) and read/write Terraform state (INFRA-015)".
 
 **Answer**:
-
+Change `roles/storage.objectAdmin` to `roles/storage.admin` in SEC-012 and SEC-013 SA #7. Update purpose to: "Create and manage Cloud Storage buckets (INFRA-019) and read/write Terraform state (INFRA-015)"
 ---
 
 ### FINDING-002 — MEDIUM — Spec: 06
@@ -71,7 +71,7 @@
 - (A) Add `roles/serviceusage.serviceUsageAdmin` to SEC-012 Granted Roles table and SEC-013 SA #7. Purpose: "Enable and disable GCP APIs (INFRA-016 API enablement)".
 
 **Answer**:
-
+Add `roles/serviceusage.serviceUsageAdmin` to SEC-012 Granted Roles table and SEC-013 SA #7. Purpose: "Enable and disable GCP APIs (INFRA-016 API enablement)".
 ---
 
 ### FINDING-003 — MEDIUM — Spec: 06
@@ -92,7 +92,7 @@
 - (A) Add `roles/iam.serviceAccountUser` to SEC-012 Granted Roles table and SEC-013 SA #7. Purpose: "Assign service accounts to Cloud Run and Cloud Functions resources (actAs permission)".
 
 **Answer**:
-
+Add `roles/iam.serviceAccountUser` to SEC-012 Granted Roles table and SEC-013 SA #7. Purpose: "Assign service accounts to Cloud Run and Cloud Functions resources (actAs permission)".
 ---
 
 ### FINDING-004 — MEDIUM — Spec: 06
@@ -113,7 +113,7 @@
 - (A) Change `roles/datastore.user` to `roles/datastore.owner` in SEC-012 and SEC-013 SA #7. Update purpose to: "Create and manage Firestore Enterprise and Native databases, entities, and indexes (INFRA-006, INFRA-012)".
 
 **Answer**:
-
+Change `roles/datastore.user` to `roles/datastore.owner` in SEC-012 and SEC-013 SA #7. Update purpose to: "Create and manage Firestore Enterprise and Native databases, entities, and indexes (INFRA-006, INFRA-012)".
 ---
 
 ### FINDING-005 — LOW — Spec: 04
@@ -137,7 +137,7 @@
 - (A) Correct DM-005 `content_hash` description: "Pre-computed SHA-256 hash of the document content. Computed by the content CI/CD pipeline on each update. Not consumed within this system — the `sync-article-embeddings` function uses `embedding_text_hash` (DM-012) for change detection, and no `/others` detail endpoint exists for ETag handling. Retained for content CI/CD pipeline internal use."
 
 **Answer**:
-
+(A) Correct DM-005 `content_hash` description: "Pre-computed SHA-256 hash of the document content. Computed by the content CI/CD pipeline on each update. Not consumed within this system — the `sync-article-embeddings` function uses `embedding_text_hash` (DM-012) for change detection, and no `/others` detail endpoint exists for ETag handling. Retained for content CI/CD pipeline internal use.
 ---
 
 ### FINDING-006 — LOW — Spec: 07
@@ -156,7 +156,7 @@
 - (A) Add `api_bans_active` and `db_connection_pool_active` to AC-OBS-010.
 
 **Answer**:
-
+Add `api_bans_active` and `db_connection_pool_active` to AC-OBS-010.
 ---
 
 ## Summary
