@@ -36,6 +36,19 @@ understand what changed and why.
 - To capture requirements, architecture, and planned execution in a structured
   format from day one.
 
+### 3) `6613bb0` — 2026-02-22
+**Title:** `docs: improve README onboarding and add commit history guide`
+
+**What changed**
+- Updated `README.md` with a quick-start learning path for new readers.
+- Improved history-related README commands to avoid stale assumptions.
+- Added `HISTORY.md` to document repository evolution in markdown format.
+
+**Why it changed**
+- To make the repository easier to learn and navigate.
+- To provide a reader-friendly explanation of commit history without requiring
+  raw git log interpretation.
+
 ## Notes
 
 - This repository is currently documentation/specification-focused.
