@@ -1,8 +1,8 @@
 ---
 title: Backend API Specifications
-version: 4.0
+version: 4.1
 date_created: 2026-02-17
-last_updated: 2026-02-21
+last_updated: 2026-02-22
 owner: TJ Monserrat
 tags: [backend, api, go, fiber, cloud-run, breadcrumbs]
 ---
@@ -459,7 +459,7 @@ THE SYSTEM SHALL execute the following steps when processing a search query:
 **Behavior**:
 
 - THE SYSTEM SHALL return the article as a `text/markdown` response with YAML front matter containing metadata and the article body below the front matter delimiter (`---`).
-- THE SYSTEM SHALL generate citation strings dynamically from article metadata (title, author, date, slug).
+- THE SYSTEM SHALL generate citation strings dynamically from article metadata (title, author, date, slug). Citations are NOT included in the stored `content_hash` (see DM-002/DM-003) because they are deterministic functions of the hashed metadata fields — any metadata change that would alter citations also invalidates the `content_hash` and ETag.
 - Citations SHALL be generated in all supported formats: APA, MLA, Chicago, BibTeX, and IEEE.
 - Citation URLs SHALL include the `.md` extension, matching the frontend route format (e.g., `https://tjmonsi.com/technical/article-title-2025-01-15-1030.md`).
 - Both the frontend route (`/technical/slug.md`) and the backend API path (`GET /technical/{slug}.md`) use the `.md` extension, presenting a consistent URL to users and search engines as if accessing a markdown file.

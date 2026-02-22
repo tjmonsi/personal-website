@@ -1,6 +1,6 @@
 ---
 title: Data Model Specifications
-version: 3.4
+version: 3.5
 date_created: 2026-02-17
 last_updated: 2026-02-22
 owner: TJ Monserrat
@@ -55,7 +55,7 @@ Data models below use MongoDB-style field definitions for Firestore Enterprise c
 | `abstract`     | string     | Yes      | Brief summary / excerpt                        |
 | `tags`         | string[]   | Yes      | List of tags (all values MUST be lowercase)    |
 | `content`      | string     | Yes      | Full article body in markdown                  |
-| `content_hash` | string     | Yes      | Pre-computed SHA-256 hash of the full response body (YAML front matter + content). Used by the backend for ETag generation and conditional request handling (304 Not Modified) without fetching the full `content` field. Computed by the content CI/CD pipeline on each update. |
+| `content_hash` | string     | Yes      | Pre-computed SHA-256 hash of the article's stored content fields (`title`, `slug`, `category`, `abstract`, `tags`, `content`, `changelog`). Excludes dynamically generated fields (citations — see BE-API-003) and system fields (`_id`, `date_created`, `date_updated`). Used by the backend for ETag generation and conditional request handling (304 Not Modified) without fetching the full `content` field. Computed by the content CI/CD pipeline on each update. |
 | `changelog`    | object[]   | Yes      | Array of changelog entries                     |
 | `changelog[].date`        | datetime | Yes | Date of the change                    |
 | `changelog[].description` | string   | Yes | Description of what changed           |

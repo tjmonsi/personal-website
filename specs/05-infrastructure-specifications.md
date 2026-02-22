@@ -1,6 +1,6 @@
 ---
 title: Infrastructure Specifications
-version: 4.7
+version: 4.8
 date_created: 2026-02-17
 last_updated: 2026-02-22
 owner: TJ Monserrat
@@ -670,15 +670,17 @@ The content management CI/CD pipeline is a **separate project** (GitHub reposito
    - `gcloud functions call sync-article-embeddings --region=asia-southeast1` (using authenticated `gcloud` CLI), OR
    - An authenticated HTTP POST to the function's URL with an OIDC identity token in the `Authorization: Bearer <token>` header.
 
-3. **Expected Firestore Enterprise Schema**: The content pipeline SHALL write articles to the following collections in Firestore Enterprise (MongoDB compat mode), conforming to the schemas defined in [04-data-model-specifications.md](04-data-model-specifications.md):
+3. **Expected Firestore Enterprise Schema**: The content pipeline SHALL write to the following collections in Firestore Enterprise (MongoDB compat mode), conforming to the schemas defined in [04-data-model-specifications.md](04-data-model-specifications.md):
+   - `frontpage` (DM-001) — single-document collection for homepage content
    - `technical_articles` (DM-002)
    - `blog_articles` (DM-003)
+   - `socials` (DM-004) — social media and contact links
    - `others` (DM-005)
    - `categories` (DM-006)
 
 4. **Sequence of Operations**: The content pipeline SHOULD follow this order on merge to main:
    1. Parse and validate markdown content.
-   2. Push structured content to Firestore Enterprise.
+   2. Push structured content to Firestore Enterprise (articles, frontpage, socials).
    3. Update the `categories` collection with any new categories.
    4. Call `sync-article-embeddings` to synchronize embedding vectors.
 
