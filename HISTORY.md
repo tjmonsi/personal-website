@@ -19,7 +19,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `chore(init): add GitHub Copilot configuration with agents, skills, and instructions`
 
 **What changed**
-- Applied commit changes: add GitHub Copilot configuration with agents, skills, and instructions.
+- Add GitHub Copilot configuration with agents, skills, and instructions.
 
 **Why it changed**
 - To bootstrap repository tooling and project conventions.
@@ -28,7 +28,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `chore(ignore): add AI assistant ignore files for Claude, Copilot, and Gemini`
 
 **What changed**
-- Applied commit changes: add AI assistant ignore files for Claude, Copilot, and Gemini.
+- Add AI assistant ignore files for Claude, Copilot, and Gemini.
 
 **Why it changed**
 - To prevent AI/tooling-specific noise from being committed.
@@ -37,7 +37,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(project): add initial personal website architecture plan`
 
 **What changed**
-- Applied commit changes: add initial personal website architecture plan.
+- Add initial personal website architecture plan.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -46,7 +46,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: add project specifications and clarifications from initial plan`
 
 **What changed**
-- Applied commit changes: add project specifications and clarifications from initial plan.
+- Add project specifications and clarifications from initial plan.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -55,7 +55,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add answers to all 15 clarification items`
 
 **What changed**
-- Applied commit changes: add answers to all 15 clarification items.
+- Add answers to all 15 clarification items.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -64,7 +64,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply clarifications and review fixes across all specs`
 
 **What changed**
-- Applied commit changes: apply clarifications and review fixes across all specs.
+- Apply clarifications and review fixes across all specs.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -73,7 +73,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add answers to specification clarification questions CLR-016 through CLR-023`
 
 **What changed**
-- Applied commit changes: add answers to specification clarification questions CLR-016 through CLR-023.
+- Add answers to specification clarification questions CLR-016 through CLR-023.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -82,7 +82,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): incorporate CLR-016–023 answers into all specification documents`
 
 **What changed**
-- Applied commit changes: incorporate CLR-016–023 answers into all specification documents.
+- Incorporate CLR-016–023 answers into all specification documents.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -91,7 +91,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add answers to CLR-024 through CLR-040`
 
 **What changed**
-- Applied commit changes: add answers to CLR-024 through CLR-040.
+- Add answers to CLR-024 through CLR-040.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -100,7 +100,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-024–CLR-040 answers and bump specs to v1.3`
 
 **What changed**
-- Applied commit changes: apply CLR-024–CLR-040 answers and bump specs to v1.3.
+- Apply CLR-024–CLR-040 answers and bump specs to v1.3.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -109,7 +109,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-041–CLR-048 answers and bump specs to v1.4`
 
 **What changed**
-- Applied commit changes: apply CLR-041–CLR-048 answers and bump specs to v1.4.
+- Apply CLR-041–CLR-048 answers and bump specs to v1.4.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -118,7 +118,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-049 answer — update JWT issuer and GitHub handle`
 
 **What changed**
-- Applied commit changes: apply CLR-049 answer — update JWT issuer and GitHub handle.
+- Apply CLR-049 answer — update JWT issuer and GitHub handle.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -127,7 +127,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): change Cloud Functions runtime from Go to Node.js (latest)`
 
 **What changed**
-- Applied commit changes: change Cloud Functions runtime from Go to Node.js (latest).
+- Change Cloud Functions runtime from Go to Node.js (latest).
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -136,7 +136,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add BigQuery log sinks and Looker Studio analytics`
 
 **What changed**
-- Applied commit changes: add BigQuery log sinks and Looker Studio analytics.
+- Add BigQuery log sinks and Looker Studio analytics.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -145,7 +145,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add 2-year BigQuery retention, IP anonymization, and privacy policy updates`
 
 **What changed**
-- Applied commit changes: add 2-year BigQuery retention, IP anonymization, and privacy policy updates.
+- Add 2-year BigQuery retention, IP anonymization, and privacy policy updates.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -154,7 +154,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): simplify to two environments and make VPC production-only`
 
 **What changed**
-- Applied commit changes: simplify to two environments and make VPC production-only.
+- Simplify to two environments and make VPC production-only.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -163,7 +163,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add vector search with Firestore Native and Gemini embeddings`
 
 **What changed**
-- Applied commit changes: add vector search with Firestore Native and Gemini embeddings.
+- Add vector search with Firestore Native and Gemini embeddings.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -172,7 +172,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): migrate embedding from Vertex AI text-embedding-004 to Gemini API gemini-embedding-001`
 
 **What changed**
-- Applied commit changes: migrate embedding from Vertex AI text-embedding-004 to Gemini API gemini-embedding-001.
+- Migrate embedding from Vertex AI text-embedding-004 to Gemini API gemini-embedding-001.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -181,7 +181,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): switch to Vertex AI gemini-embedding-001 with 2048-dim vectors`
 
 **What changed**
-- Applied commit changes: switch to Vertex AI gemini-embedding-001 with 2048-dim vectors.
+- Switch to Vertex AI gemini-embedding-001 with 2048-dim vectors.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -190,7 +190,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add URL state sync, heading anchors, and copy link features`
 
 **What changed**
-- Applied commit changes: add URL state sync, heading anchors, and copy link features.
+- Add URL state sync, heading anchors, and copy link features.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -199,7 +199,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): set Cloud Run max instances, memory, and concurrency`
 
 **What changed**
-- Applied commit changes: set Cloud Run max instances, memory, and concurrency.
+- Set Cloud Run max instances, memory, and concurrency.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -208,7 +208,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): enforce non-root container user 'jack' in Cloud Run`
 
 **What changed**
-- Applied commit changes: enforce non-root container user 'jack' in Cloud Run.
+- Enforce non-root container user 'jack' in Cloud Run.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -217,7 +217,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): remove Firestore storage for POST /t tracking and errors`
 
 **What changed**
-- Applied commit changes: remove Firestore storage for POST /t tracking and errors.
+- Remove Firestore storage for POST /t tracking and errors.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -226,7 +226,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add link click, time-on-page, and visitor ID tracking`
 
 **What changed**
-- Applied commit changes: add link click, time-on-page, and visitor ID tracking.
+- Add link click, time-on-page, and visitor ID tracking.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -235,7 +235,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-050–055 clarifications and architecture updates`
 
 **What changed**
-- Applied commit changes: apply CLR-050–055 clarifications and architecture updates.
+- Apply CLR-050–055 clarifications and architecture updates.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -244,7 +244,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add WIF auth, integration contract, and embedding sync scheduler`
 
 **What changed**
-- Applied commit changes: add WIF auth, integration contract, and embedding sync scheduler.
+- Add WIF auth, integration contract, and embedding sync scheduler.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -253,7 +253,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add Terraform IaC and GCS state bucket documentation`
 
 **What changed**
-- Applied commit changes: add Terraform IaC and GCS state bucket documentation.
+- Add Terraform IaC and GCS state bucket documentation.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -262,7 +262,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: apply CLR-059–081 and add alerting/SLI sections`
 
 **What changed**
-- Applied commit changes: apply CLR-059–081 and add alerting/SLI sections.
+- Apply CLR-059–081 and add alerting/SLI sections.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -271,7 +271,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: apply CLR-082–087 and archive batch 0010`
 
 **What changed**
-- Applied commit changes: apply CLR-082–087 and archive batch 0010.
+- Apply CLR-082–087 and archive batch 0010.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -280,7 +280,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: add clarifications batch 0011 (CLR-088–095)`
 
 **What changed**
-- Applied commit changes: add clarifications batch 0011 (CLR-088–095).
+- Add clarifications batch 0011 (CLR-088–095).
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -289,7 +289,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: apply CLR-088–095 and archive batch 0011`
 
 **What changed**
-- Applied commit changes: apply CLR-088–095 and archive batch 0011.
+- Apply CLR-088–095 and archive batch 0011.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -298,7 +298,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: add clarifications batch 0012 (CLR-096–102)`
 
 **What changed**
-- Applied commit changes: add clarifications batch 0012 (CLR-096–102).
+- Add clarifications batch 0012 (CLR-096–102).
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -307,7 +307,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-096–102 clarifications and archive batch 0012`
 
 **What changed**
-- Applied commit changes: apply CLR-096–102 clarifications and archive batch 0012.
+- Apply CLR-096–102 clarifications and archive batch 0012.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -316,7 +316,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add batch 0013 (CLR-103–104) for owner review`
 
 **What changed**
-- Applied commit changes: add batch 0013 (CLR-103–104) for owner review.
+- Add batch 0013 (CLR-103–104) for owner review.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -325,7 +325,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add answers for batch 0013 (CLR-103–104)`
 
 **What changed**
-- Applied commit changes: add answers for batch 0013 (CLR-103–104).
+- Add answers for batch 0013 (CLR-103–104).
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -334,7 +334,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: apply CLR-103, CLR-104, and additional notes from batch 0013`
 
 **What changed**
-- Applied commit changes: apply CLR-103, CLR-104, and additional notes from batch 0013.
+- Apply CLR-103, CLR-104, and additional notes from batch 0013.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -343,7 +343,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: add clarifications batch 0014 (CLR-105 through CLR-112)`
 
 **What changed**
-- Applied commit changes: add clarifications batch 0014 (CLR-105 through CLR-112).
+- Add clarifications batch 0014 (CLR-105 through CLR-112).
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -352,7 +352,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: rewrite README for spec-driven development showcase`
 
 **What changed**
-- Applied commit changes: rewrite README for spec-driven development showcase.
+- Rewrite README for spec-driven development showcase.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -361,7 +361,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add answers for batch 0014 (CLR-105–112)`
 
 **What changed**
-- Applied commit changes: add answers for batch 0014 (CLR-105–112).
+- Add answers for batch 0014 (CLR-105–112).
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -370,7 +370,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: apply batch 0014 answers (CLR-105–112) and additional notes`
 
 **What changed**
-- Applied commit changes: apply batch 0014 answers (CLR-105–112) and additional notes.
+- Apply batch 0014 answers (CLR-105–112) and additional notes.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -379,7 +379,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `fix(specs): correct AC-OBS-006 cross-reference from OBS-009 to OBS-006`
 
 **What changed**
-- Applied commit changes: correct AC-OBS-006 cross-reference from OBS-009 to OBS-006.
+- Correct AC-OBS-006 cross-reference from OBS-009 to OBS-006.
 
 **Why it changed**
 - To address identified issues and improve quality/completeness.
@@ -388,7 +388,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): conditional sort order based on search query presence`
 
 **What changed**
-- Applied commit changes: conditional sort order based on search query presence.
+- Conditional sort order based on search query presence.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -397,7 +397,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): update 429 snackbar message with clearer retry guidance`
 
 **What changed**
-- Applied commit changes: update 429 snackbar message with clearer retry guidance.
+- Update 429 snackbar message with clearer retry guidance.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -406,7 +406,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): add breadcrumb tracking, error retry, and error modal specs`
 
 **What changed**
-- Applied commit changes: add breadcrumb tracking, error retry, and error modal specs.
+- Add breadcrumb tracking, error retry, and error modal specs.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -415,7 +415,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-113–CLR-120 clarification answers`
 
 **What changed**
-- Applied commit changes: apply CLR-113–CLR-120 clarification answers.
+- Apply CLR-113–CLR-120 clarification answers.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -424,7 +424,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-121–CLR-131 clarification answers`
 
 **What changed**
-- Applied commit changes: apply CLR-121–CLR-131 clarification answers.
+- Apply CLR-121–CLR-131 clarification answers.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -433,7 +433,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add CLR-132 through CLR-143 re-check findings`
 
 **What changed**
-- Applied commit changes: add CLR-132 through CLR-143 re-check findings.
+- Add CLR-132 through CLR-143 re-check findings.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -442,7 +442,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-132 through CLR-143 across all specs`
 
 **What changed**
-- Applied commit changes: apply CLR-132 through CLR-143 across all specs.
+- Apply CLR-132 through CLR-143 across all specs.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -451,7 +451,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(clarifications): add CLR-144 through CLR-147 third re-check findings`
 
 **What changed**
-- Applied commit changes: add CLR-144 through CLR-147 third re-check findings.
+- Add CLR-144 through CLR-147 third re-check findings.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -460,7 +460,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-144 through CLR-147 across all specs`
 
 **What changed**
-- Applied commit changes: apply CLR-144 through CLR-147 across all specs.
+- Apply CLR-144 through CLR-147 across all specs.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -469,7 +469,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `feat(specs): add tag chip input component with lowercase normalization`
 
 **What changed**
-- Applied commit changes: add tag chip input component with lowercase normalization.
+- Add tag chip input component with lowercase normalization.
 
 **Why it changed**
 - To add new planned capability or project scope.
@@ -478,7 +478,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `feat(specs): randomized humorous service worker update messages`
 
 **What changed**
-- Applied commit changes: randomized humorous service worker update messages.
+- Randomized humorous service worker update messages.
 
 **Why it changed**
 - To add new planned capability or project scope.
@@ -487,7 +487,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply CLR-148–192 across all specifications`
 
 **What changed**
-- Applied commit changes: apply CLR-148–192 across all specifications.
+- Apply CLR-148–192 across all specifications.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -496,7 +496,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply Fiber migration, CLR-193–203, and Go style guide`
 
 **What changed**
-- Applied commit changes: apply Fiber migration, CLR-193–203, and Go style guide.
+- Apply Fiber migration, CLR-193–203, and Go style guide.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -505,7 +505,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: add 45 missing acceptance criteria across 5 specs (AC audit)`
 
 **What changed**
-- Applied commit changes: add 45 missing acceptance criteria across 5 specs (AC audit).
+- Add 45 missing acceptance criteria across 5 specs (AC audit).
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
@@ -514,7 +514,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply 25 gap analysis answers across all specs and add v2 re-analysis`
 
 **What changed**
-- Applied commit changes: apply 25 gap analysis answers across all specs and add v2 re-analysis.
+- Apply 25 gap analysis answers across all specs and add v2 re-analysis.
 
 **Why it changed**
 - To close specification gaps and keep cross-spec consistency.
@@ -523,7 +523,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply v2 gap analysis answers and add v3 gap analysis`
 
 **What changed**
-- Applied commit changes: apply v2 gap analysis answers and add v3 gap analysis.
+- Apply v2 gap analysis answers and add v3 gap analysis.
 
 **Why it changed**
 - To close specification gaps and keep cross-spec consistency.
@@ -532,7 +532,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply v3 gap answers and add v4 gap analysis`
 
 **What changed**
-- Applied commit changes: apply v3 gap answers and add v4 gap analysis.
+- Apply v3 gap answers and add v4 gap analysis.
 
 **Why it changed**
 - To close specification gaps and keep cross-spec consistency.
@@ -541,7 +541,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply v4 gap answers and add v5 gap analysis`
 
 **What changed**
-- Applied commit changes: apply v4 gap answers and add v5 gap analysis.
+- Apply v4 gap answers and add v5 gap analysis.
 
 **Why it changed**
 - To close specification gaps and keep cross-spec consistency.
@@ -550,7 +550,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply v5 gap answers and add v6 gap analysis`
 
 **What changed**
-- Applied commit changes: apply v5 gap answers and add v6 gap analysis.
+- Apply v5 gap answers and add v6 gap analysis.
 
 **Why it changed**
 - To close specification gaps and keep cross-spec consistency.
@@ -559,7 +559,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply v6-v7 gap fixes and add v8 gap analysis`
 
 **What changed**
-- Applied commit changes: apply v6-v7 gap fixes and add v8 gap analysis.
+- Apply v6-v7 gap fixes and add v8 gap analysis.
 
 **Why it changed**
 - To close specification gaps and keep cross-spec consistency.
@@ -568,7 +568,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): apply v8-v9 gap fixes and add v9-v10 gap analysis`
 
 **What changed**
-- Applied commit changes: apply v8-v9 gap fixes and add v9-v10 gap analysis.
+- Apply v8-v9 gap fixes and add v9-v10 gap analysis.
 
 **Why it changed**
 - To close specification gaps and keep cross-spec consistency.
@@ -577,7 +577,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs(specs): expand actAs scope for app deployer SA to include Compute Engine default SA`
 
 **What changed**
-- Applied commit changes: expand actAs scope for app deployer SA to include Compute Engine default SA.
+- Expand actAs scope for app deployer SA to include Compute Engine default SA.
 
 **Why it changed**
 - To improve and clarify specification documents for implementation readiness.
@@ -586,7 +586,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `fix: resolve 2 IMPORTANT findings and add implementation planning docs`
 
 **What changed**
-- Applied commit changes: resolve 2 IMPORTANT findings and add implementation planning docs.
+- Resolve 2 IMPORTANT findings and add implementation planning docs.
 
 **Why it changed**
 - To address identified issues and improve quality/completeness.
@@ -595,7 +595,7 @@ This file lists commits from the `main` branch in chronological order and summar
 **Title:** `docs: add AGENTS.md and llms.txt for AI agent context`
 
 **What changed**
-- Applied commit changes: add AGENTS.md and llms.txt for AI agent context.
+- Add AGENTS.md and llms.txt for AI agent context.
 
 **Why it changed**
 - To improve project documentation and reader/agent context.
