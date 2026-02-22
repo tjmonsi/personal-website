@@ -1,0 +1,34 @@
+# Personal Website — TJ Monserrat
+
+> Full-stack web application specifications for a personal website with technical blog, opinion blog, social links, and curated external content. Built with Nuxt 4 (SPA) on Firebase Hosting, Go (Fiber v2) on Cloud Run, Firestore Enterprise (MongoDB compat), and Firestore Native for vector search — all on GCP (`asia-southeast1`). Currently in the specifications phase; no implementation code written yet.
+
+Important notes:
+
+- All 7 specification documents are finalized and implementation-ready. Implementation must trace back to spec identifiers (e.g., `BE-API-002`, `DM-004`, `INFRA-008c`, `SEC-013`).
+- Two separate Firestore databases exist: Enterprise (MongoDB compat, primary data) and Native (`vector-search`, vector embeddings). They use different client libraries — MongoDB Go driver and Firestore Go SDK respectively.
+- The API is GET-only with a single `POST /t` exception for visitor tracking. Content is pushed by a separate CI/CD pipeline.
+- The 160-task implementation plan spans 7 phases (P0–P7). Phases 2, 3, and 4 can run in parallel after Phase 1.
+
+## Specifications
+
+- [System Overview](specs/01-system-overview.md): Architecture, technology stack, 23 architectural decisions (AD-001–AD-023), deployment topology, environments
+- [Frontend Specifications](specs/02-frontend-specifications.md): 10 pages (FE-PAGE-001–010), 14 components (FE-COMP-001–014), UX behavior, offline reading support
+- [Backend API Specifications](specs/03-backend-api-specifications.md): 13 endpoints (BE-API-001–013), middleware chain, error format, vector search flow
+- [Data Model Specifications](specs/04-data-model-specifications.md): 12 Firestore collections (DM-001–012), schemas, indexes, constraints
+- [Infrastructure Specifications](specs/05-infrastructure-specifications.md): GCP resources (INFRA-001–020), Terraform configuration, CI/CD pipelines, integration contract
+- [Security Specifications](specs/06-security-specifications.md): Authentication, CSP headers, CORS, rate limiting, IAM roles, 10 service accounts (SEC-001–014)
+- [Observability Specifications](specs/07-observability-specifications.md): Structured logging, Cloud Monitoring alerts, BigQuery log sinks, SLIs/SLOs (OBS-001–011)
+
+## Documentation
+
+- [AGENTS.md](AGENTS.md): Agent-focused project context — setup commands, code style, testing, build/deploy, environment config, debugging
+- [README](README.md): Human-facing project overview, spec-driven development methodology, reading guide
+- [Code Style Guide](CODE_STYLE_GUIDE.md): Coding standards for Go (Fiber v2), JavaScript/TypeScript (Neostandard + Nuxt ESLint), and Python (Google Style)
+- [Implementation Tasks](tasks.md): 160-task plan across 7 phases with dependency graph and parallelization notes
+- [Pre-requisite Manual](manuals/pre-requisite-manual.md): Step-by-step GCP bootstrap guide — project setup, service accounts, WIF, GitHub secrets
+- [Cost Estimate](docs/cost-estimate-draft.md): GCP monthly cost modeling for two traffic scenarios
+
+## Optional
+
+- [Apache 2.0 License](LICENSE): Project license
+- [Initial Plan](archive/plans/initial-plan.md): Original rough plan that started the specification process
