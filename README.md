@@ -13,6 +13,17 @@ This is the specification repository for [TJ Monserrat's](https://github.com/tjm
 
 The real value here isn't the website itself — it's the **process**. This repository captures how a senior engineer approaches software design: removing assumptions, documenting decisions, and iterating on specifications with AI assistance until they're implementation-ready.
 
+## Quick Start (How to Use This Repository)
+
+If you're new here, follow this path:
+
+1. Read [`archive/plans/initial-plan.md`](archive/plans/initial-plan.md) to see the raw starting point.
+2. Read the 7 spec files in [`specs/`](specs/) from `01` to `07`.
+3. Read [`tasks.md`](tasks.md) to see how specs map to implementation work.
+4. Read [`HISTORY.md`](HISTORY.md) for the repository evolution with commit-by-commit context.
+
+This repository is currently documentation-only. No application code has been implemented yet.
+
 ### The Tech Stack (Planned)
 
 | Layer | Technology |
@@ -105,14 +116,17 @@ Read the files in `specs/` in order (01 through 07), then the `docs/cost-estimat
 git clone https://github.com/tjmonsi/personal-website.git
 cd personal-website
 
-# See the full commit history (38 commits of pure specification evolution)
+# See the full commit history
 git log --oneline
+
+# Read a summarized explanation of the same history
+cat HISTORY.md
 
 # See how a specific spec file changed over time
 git log --oneline -- specs/06-security-specifications.md
 
-# See the diff for a specific round of changes
-git show 8a2a705  # Example: CLR-096–102 application
+# See the diff for a specific commit
+git show <commit-hash>
 ```
 
 The evolution follows a clear pattern:
